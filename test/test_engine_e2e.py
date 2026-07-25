@@ -1,7 +1,9 @@
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from scripts.orchestrator.engine import OrchestratorEngine
 from scripts.orchestrator.mcp_server import process_message
@@ -106,6 +108,26 @@ class TestOrchestratorEngineE2E(unittest.TestCase):
         self.assertEqual(payload["status"], "completed")
         self.assertEqual(payload["output"]["inputs"]["arg1"], "hello")
 
+    def test_write_spec_bad_draft_fails_orchestrator(self):
+        repo_skills = Path(__file__).parent.parent / "skills"
+        write_spec_dir = self.skills_dir / "write-spec"
+        write_spec_dir.mkdir(parents=True)
+        for name in ("manifest.json", "SKILL.md"):
+            (write_spec_dir / name).write_text((repo_skills / "write-spec" / name).read_text(), encoding="utf-8")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.dict(os.environ, {"CODEX_PROJECT_ROOT": tmp}):
+                engine = OrchestratorEngine(self.skills_dir, max_retries=2)
+                result = engine.run_tool_call(
+                    "write-spec",
+                    {
+                        "ticket_id": "T-1",
+                        "spec_kind": "tech-spec",
+                        "draft_content": "TODO: fill this in later",
+                    },
+                )
+                self.assertFalse(result.ok, result.error)
+                self.assertIn("placeholder", (result.error or "").lower())
 
 if __name__ == "__main__":
     unittest.main()

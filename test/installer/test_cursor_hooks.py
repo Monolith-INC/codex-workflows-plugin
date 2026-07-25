@@ -8,7 +8,9 @@ class TestCursorHooks(unittest.TestCase):
         config = desired_cursor_hooks("python3 /tmp/cursor_enforce_hook.py")
         self.assertEqual(config["version"], 1)
         self.assertEqual(len(config["hooks"]["preToolUse"]), 1)
-        self.assertIn("Shell|Read|Grep|Delete|Task", config["hooks"]["preToolUse"][0]["matcher"])
+        matcher = config["hooks"]["preToolUse"][0]["matcher"]
+        self.assertIn("Shell|Read|Write|Grep|Delete|Task", matcher)
+        self.assertIn("Write", matcher)
 
     def test_merge_cursor_hooks_deduplicates_by_command(self):
         existing = {

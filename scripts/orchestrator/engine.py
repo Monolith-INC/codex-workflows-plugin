@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .evaluator import evaluate_output
+from .evaluator import collect_critiques
 from .hooks import authorization_hook, cli_ui_hook
 from .manifests import manifest_by_name
 from .schema import validate_inputs
@@ -127,7 +127,7 @@ class OrchestratorEngine:
                     state=current.state.value,
                 )
 
-            critiques = evaluate_output(output, manifest)
+            critiques = collect_critiques(output, manifest)
             if not critiques:
                 stream.dispatch(
                     Event(type="TaskCompletedEvent", payload={"task_id": task_id, "output": output})
@@ -169,6 +169,12 @@ class OrchestratorEngine:
                 )
             if current.state == TaskState.READY and current.retry_count < self.max_retries:
                 stream.dispatch(Event(type="TaskSpawnedEvent", payload={"task_id": task_id}))
+                reflection = output.get("reflection") if isinstance(output, dict) else None
+                if isinstance(reflection, dict):
+                    arguments = {
+                        **arguments,
+                        "attempt": reflection.get("attempt", current.retry_count),
+                    }
                 continue
 
             return ToolCallResult(
