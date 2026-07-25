@@ -26,7 +26,7 @@ def evaluate(event: CanonicalToolEvent) -> PolicyDecision:
         return ticket_decision
 
     if is_starting_ticket(event):
-        start_decision = _validate_git_and_vault_on_start(event)
+        start_decision = validate_ticket_start(event)
         if start_decision.is_denied():
             return start_decision
 
@@ -51,7 +51,7 @@ def is_starting_ticket(event: CanonicalToolEvent) -> bool:
     return False
 
 
-def _validate_git_and_vault_on_start(event: CanonicalToolEvent) -> PolicyDecision:
+def validate_ticket_start(event: CanonicalToolEvent) -> PolicyDecision:
     """Enforces git safety and vault active-ticket limits when starting a ticket."""
     # 1. Check if another ticket is already active in vault
     if event.vault_dir:

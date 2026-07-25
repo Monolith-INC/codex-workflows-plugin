@@ -53,6 +53,29 @@ class TestOrchestratorEngineE2E(unittest.TestCase):
         self.assertIn("active_ledger_path", result.output or {})
         self.assertIn("6871", result.output["active_ledger_path"])
 
+    def test_start_ticket_orchestrator_enforces_active_ticket_policy(self):
+        start_dir = self.skills_dir / "start-ticket"
+        start_dir.mkdir()
+        (start_dir / "manifest.json").write_text(
+            (Path(__file__).parent.parent / "skills" / "start-ticket" / "manifest.json").read_text(),
+            encoding="utf-8",
+        )
+        (start_dir / "SKILL.md").write_text("# start-ticket\n", encoding="utf-8")
+
+        vault = "AI_Codex"
+        active_dir = Path(self.tempdir.name) / "project" / vault / "Tickets" / "Active"
+        active_dir.mkdir(parents=True)
+        (active_dir / "task-999.md").write_text("existing\n", encoding="utf-8")
+
+        with mock.patch.dict(
+            os.environ,
+            {"CODEX_PROJECT_ROOT": str(Path(self.tempdir.name) / "project"), "CODEX_VAULT_FOLDER": vault},
+        ):
+            engine = OrchestratorEngine(self.skills_dir)
+            result = engine.run_tool_call("start-ticket", {"ticket_id": "task-123"})
+        self.assertFalse(result.ok)
+        self.assertIn("already an active ticket", result.error or "")
+
     def test_missing_required_argument_fails_fast(self):
         result = self.engine.run_tool_call("mock-skill", {})
         self.assertFalse(result.ok)

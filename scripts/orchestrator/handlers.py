@@ -8,6 +8,8 @@ from scripts.artifact_profiles.resolution import resolution_profile
 from scripts.artifact_profiles.spec import spec_profile
 from scripts.artifact_reflection import ArtifactContext, ReflectionEngine, ReflectionState, load_mistakes
 from scripts.resolution_runtime import load_resolution_template, plan_resolution
+from scripts.policy.engine import validate_ticket_start
+from scripts.policy.events import CanonicalToolEvent
 from scripts.resolve_ticket_hook import on_resolve_ticket
 from scripts.spec_runtime import load_template, plan_spec_generation, slug_ticket_id
 from scripts.spec_start_hook import on_start_ticket
@@ -87,6 +89,18 @@ def handle_start_ticket(arguments: dict[str, Any], manifest: dict[str, Any], ins
     root = _project_root()
     if root is not None:
         ledger_path = root / rel_path
+        if not ledger_path.exists():
+            decision = validate_ticket_start(
+                CanonicalToolEvent(
+                    client="orchestrator",
+                    tool_name="Write",
+                    file_path=str(ledger_path),
+                    workspace_root=str(root),
+                    vault_dir=str(root / vault),
+                )
+            )
+            if decision.is_denied():
+                raise ValueError(decision.reason or "ticket start blocked by policy")
         ledger_path.parent.mkdir(parents=True, exist_ok=True)
         if not ledger_path.exists():
             ledger_path.write_text(
