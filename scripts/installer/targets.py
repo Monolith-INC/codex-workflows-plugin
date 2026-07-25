@@ -46,14 +46,10 @@ def target_config_paths(target: str | Target) -> tuple[str, ...]:
 
 
 def target_global_config_path(target: str | Target) -> Path | None:
-    """Absolute path to the machine-global hook config for this target, if discoverable.
+    """Deprecated: former machine-global hook path helper.
 
-    Claude  → ~/.claude/settings.json
-    Cursor  → ~/.cursor/hooks.json
-    Gemini  → ~/.gemini/settings.json
-    Codex   → ~/.gemini/config/hooks.json  (Codex uses the Gemini CLI config layer)
-    Antigravity → <ide-install>/.agents/hooks.json  (IDE directory is auto-discovered)
-    Cursor  → ~/.cursor/hooks.json (user) or <project>/.cursor/hooks.json (project)
+    Project-only install wires via ``target_config_paths`` under ``--dest``.
+    Kept for optional legacy purge scans when ``dest`` is omitted.
     """
     home = Path.home()
     normalized = normalize_target(target)

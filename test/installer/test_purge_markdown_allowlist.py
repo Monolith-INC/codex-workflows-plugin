@@ -16,16 +16,14 @@ PLUGIN_ROOT = Path(__file__).parent.parent.parent
 
 
 class TestPurgeMarkdownAllowlist(unittest.TestCase):
-    def test_scan_and_purge_strips_hooks_and_removes_allowlist_config(self):
+    def test_scan_and_purge_strips_project_hooks_and_removes_allowlist_config(self):
         with tempfile.TemporaryDirectory() as temp_home:
             home = Path(temp_home)
             project = home / "project"
-            claude_dir = home / ".claude"
-            claude_dir.mkdir(parents=True)
             project_claude = project / ".claude"
             project_claude.mkdir(parents=True)
 
-            settings = claude_dir / "settings.json"
+            settings = project_claude / "settings.json"
             settings.write_text(
                 json.dumps(
                     {
@@ -76,10 +74,43 @@ class TestPurgeMarkdownAllowlist(unittest.TestCase):
             blob = json.dumps(remaining)
             self.assertNotIn("codex_enforce_hook.py", blob)
 
-    def test_bootstrap_purge_allowlist_scan_only(self):
+    def test_dest_purge_does_not_touch_home_hooks(self):
         with tempfile.TemporaryDirectory() as temp_home:
             home = Path(temp_home)
-            claude_dir = home / ".claude"
+            project = home / "project"
+            (project / ".claude").mkdir(parents=True)
+            home_settings = home / ".claude" / "settings.json"
+            home_settings.parent.mkdir(parents=True)
+            home_settings.write_text(
+                json.dumps(
+                    {
+                        "hooks": {
+                            "PreToolUse": [
+                                {
+                                    "matcher": ".*",
+                                    "hooks": [
+                                        {
+                                            "type": "command",
+                                            "command": "python3 codex_enforce_hook.py",
+                                        }
+                                    ],
+                                }
+                            ]
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            before = home_settings.read_text(encoding="utf-8")
+            scan = scan_markdown_allowlist_artifacts(dest=project, home=home)
+            self.assertNotIn(home_settings, scan.hooks_with_managed_entries)
+            purge_markdown_allowlist_artifacts(dest=project, home=home, dry_run=False)
+            self.assertEqual(home_settings.read_text(encoding="utf-8"), before)
+
+    def test_bootstrap_purge_allowlist_scan_only(self):
+        with tempfile.TemporaryDirectory() as temp_project:
+            project = Path(temp_project)
+            claude_dir = project / ".claude"
             claude_dir.mkdir(parents=True)
             settings = claude_dir / "settings.json"
             settings.write_text(
@@ -110,11 +141,12 @@ class TestPurgeMarkdownAllowlist(unittest.TestCase):
                     "scripts.installer.bootstrap",
                     "--purge-allowlist",
                     "--scan-only",
+                    "--dest",
+                    str(project),
                 ],
                 cwd=PLUGIN_ROOT,
                 capture_output=True,
                 text=True,
-                env={**os.environ, "HOME": str(home)},
             )
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertIn("managed enforce hook", result.stdout.lower())

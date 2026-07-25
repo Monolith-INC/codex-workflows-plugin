@@ -2,15 +2,17 @@
 
 A portable, multi-host workspace automation plugin that enforces session bootstrapping, ticket lifecycle governance, YouTrack state gating, and git safety checks across agent-driven development workflows.
 
-> **v0.5.6** — Removes the markdown allowlist from the enforce hook (reads no longer blocked outside CLAUDE.md/vault), adds `--purge-allowlist` scan/strip automation, and keeps vault/session/ticket guards. **179 tests**, all passing.
+> **v0.5.7** — Session continuity, `/skip-ledger`, protected-branch git guard, and **project-only install** (`--dest` required; no global/`$HOME` install).
 
 ## Purpose
 
 To ensure that autonomous agents consistently follow strict repository governance protocols:
-1. **Mandatory Session Bootstrap**: Blocks all codebase writes until today's session record is initialized in the vault.
+1. **Mandatory Session Bootstrap**: Blocks codebase writes until a continuable open Agent Session exists (`next: null` under vault or `Projects/*/Agent_Sessions/`, matching branch, ≤8 hours old).
 2. **Structured Ticket Progression**: Validates and gates ticket folder transitions (`Ready -> Active -> Closed/Resolved`), enforcing YouTrack state synchronization at each step.
 3. **Git Safety on Ticket Start**: Before activating a ticket, enforces that no other ticket is already active, the branch is not the base integration branch, the branch is synced with `origin/<base>`, and no unmerged commits from other feature branches are present.
-4. **Destructive-Op Guard**: Prevents `rm`/`rmdir` against the Codex vault — status transitions must always be expressed as file moves.
+4. **Protected-Branch Guard**: Blocks mutating git while checked out on `main`/`master`/`develop`/`unstable`; require a `feature/`/`bugfix/`/`techdebt/` ticket branch.
+5. **Skip Ledger**: `/skip-ledger` bypasses session/ticket/branch ledger hooks until `/resume-ledger` (vault destructive deletes stay blocked).
+6. **Destructive-Op Guard**: Prevents `rm`/`rmdir` against the Codex vault — status transitions must always be expressed as file moves.
 
 ## Architecture
 
@@ -18,7 +20,7 @@ To ensure that autonomous agents consistently follow strict repository governanc
 scripts/
 ├── hook_runtime.py       # Entry point — orchestrates all policy checks
 ├── ticket_runtime.py     # Path extraction, YouTrack transcript scanner, bugfix inference
-├── policy/               # Pure policy engine (engine.py, events.py, git_utils.py) — no I/O
+├── policy/               # Policy engine + session_gate, ledger_skip, git_branch_guard, git_utils
 ├── adapters/             # 5 host adapters: codex, gemini, claude, antigravity, cursor
 ├── installer/            # Multi-target hook wiring (cli.py, targets.py, merge.py, bootstrap.py)
 ├── artifact_reflection.py # Shared Actor-Critic reflection engine for skill artifacts
@@ -109,7 +111,9 @@ The plugin installs a `PreToolUse` / `BeforeTool` hook that intercepts every age
 
 * **No Destructive Deletions**: `rm`/`rmdir` against vault paths are denied.
 * **Markdown Allowlist**: Only `CLAUDE.md`, `GEMINI.md`, `.agent/`, and the vault may be written.
-* **Mandatory Session Bootstrapping**: Write tools are blocked until `<vault>/Agent_Sessions/YYYY-MM-DD*.md` exists (with `next: null` frontmatter). Error messages include the actual vault directory name — no project names are hard-coded.
+* **Mandatory Session Bootstrapping**: Write tools require an open Agent Session (`next: null`) under `<vault>/Agent_Sessions/` or `<vault>/Projects/<project>/Agent_Sessions/`. An open session may continue when it matches the current branch and is under 8 hours old; otherwise close it and open a new one.
+* **Skip Ledger**: `/skip-ledger` writes `<vault>/.codex_ledger_skip` to bypass session/ticket/branch ledger hooks until `/resume-ledger` (vault destructive deletes stay blocked).
+* **Protected Branch Guard**: Mutating git on `main`/`master`/`develop`/`unstable` is denied; create and check out a `feature/`/`bugfix/`/`techdebt/` branch first.
 * **Ticket Destination Validation**: Wrong folder for the ticket type is denied with a specific reason message.
 * **Git Safety on Ticket Start**: When moving a ticket from `Ready/` to `Active/` (or writing a new file into `Active/`), the hook enforces:
   - No other ticket is already active in `Tickets/Active/`
@@ -130,103 +134,98 @@ The plugin installs a `PreToolUse` / `BeforeTool` hook that intercepts every age
 - Git (required for git safety checks at ticket-start time)
 - The **target project** must be a git repository
 
-### One-step install
+### One-step local install
 
-Install the latest release and wire all detected agent hosts:
+Install is **project-only**. `--dest` is required. There is no global/`$HOME` install.
 
 ```bash
-curl -fsSL https://github.com/theocarranza/codex-workflows-plugin/releases/latest/download/install.sh | bash
+curl -fsSL https://github.com/theocarranza/codex-workflows-plugin/releases/latest/download/install.sh \
+  | bash -s -- --dest /path/to/your/project
 ```
 
 For private repository access, download the installer with authenticated `gh` first:
 
 ```bash
 tmp=$(mktemp -d)
-gh release download v0.5.3 -R theocarranza/codex-workflows-plugin -p install.sh -D "$tmp"
-bash "$tmp/install.sh"
-```
-
-To also wire a specific project with project-level hooks, pass `--dest`:
-
-```bash
-curl -fsSL https://github.com/theocarranza/codex-workflows-plugin/releases/latest/download/install.sh | bash -s -- --dest /path/to/your/project
+gh release download v0.5.7 -R theocarranza/codex-workflows-plugin -p install.sh -D "$tmp"
+bash "$tmp/install.sh" --dest /path/to/your/project
 ```
 
 No additional Python dependencies are needed — the plugin uses only the standard library.
 
-Bootstrap does three things automatically:
+Bootstrap does the following under `--dest`:
 
-1. **Installs the runtime** to `~/.codex-workflows/` (the stable location hook commands reference).
-2. **Registers the plugin with Claude Code** by copying the `skills/`, `commands/`, and runtime `scripts/` trees into `~/.claude/plugins/cache/local/codex-workflows-plugin/<version>/` and adding an entry to `~/.claude/plugins/installed_plugins.json`. After this, the plugin appears in Claude's plugin manager and its skills/commands are available to any Claude session.
-3. **Registers with Antigravity and Codex** marketplaces when those config directories exist on the machine.
+1. **Installs the runtime** to `<dest>/.codex-workflows/` (hook commands reference this path).
+2. **Wires project hook configs** (for example `.claude/settings.json`, `.cursor/hooks.json`, `.agents/hooks.json`).
+3. **Syncs discovery trees**: Claude skills/commands under `.claude/skills/` and `.claude/commands/`; Antigravity skills under `.agents/skills/`; workflows/rules under `.agent/`.
+4. **Merges** an `agentic-orchestrator` MCP entry into the project's `.mcp.json` when wiring.
 
-> **After bootstrapping, restart your Claude session** (close and reopen the IDE panel or CLI) for the newly registered skills and commands to appear.
+> **After bootstrapping, restart your agent session in that project** so hooks and skills reload.
 
 ### Advanced install options
 
 Pin a specific release:
 
 ```bash
-curl -fsSL https://github.com/theocarranza/codex-workflows-plugin/releases/latest/download/install.sh | CODEX_WORKFLOWS_VERSION=v0.5.2 bash
+curl -fsSL https://github.com/theocarranza/codex-workflows-plugin/releases/latest/download/install.sh \
+  | CODEX_WORKFLOWS_VERSION=v0.5.7 bash -s -- --dest /path/to/your/project
 ```
 
 Wire a specific host instead of all agents:
 
 ```bash
-curl -fsSL https://github.com/theocarranza/codex-workflows-plugin/releases/latest/download/install.sh | bash -s -- --target claude
+curl -fsSL https://github.com/theocarranza/codex-workflows-plugin/releases/latest/download/install.sh \
+  | bash -s -- --dest /path/to/your/project --target claude
 ```
 
-The plugin auto-discovers each host's config location:
+Project hook config paths:
 
-| Target | Global config wired | Hook event |
+| Target | Project config wired | Hook event |
 |---|---|---|
-| `claude` | `~/.claude/settings.json` | `PreToolUse` |
-| `cursor` | `~/.cursor/hooks.json` | `preToolUse` |
-| `gemini` | `~/.gemini/settings.json` (Deprecated) | `BeforeTool` |
-| `codex` | `~/.gemini/config/hooks.json` | `PreToolUse` |
-| `antigravity` | `<ide-install>/.agents/hooks.json` (auto-discovered) | `PreToolUse` |
-| `antigravity-cli` | `~/.gemini/antigravity-cli/settings.json` | `BeforeTool` |
-| `all-agents` | all six above (skips hosts not installed) | — |
+| `claude` | `.claude/settings.json` | `PreToolUse` |
+| `cursor` | `.cursor/hooks.json` | `preToolUse` |
+| `gemini` | `.gemini/settings.json` (Deprecated) | `BeforeTool` |
+| `codex` | `hooks/hooks.json` | `PreToolUse` |
+| `antigravity` | `.agents/hooks.json` | `PreToolUse` |
+| `antigravity-cli` | `.gemini/antigravity-cli/settings.json` | `BeforeTool` |
+| `all-agents` | all of the above under `--dest` | — |
 
-Hook wiring is idempotent — re-running bootstrap strips any stale entries from previous installs before writing the fresh hook, so running it multiple times is safe.
+Hook wiring is idempotent — re-running bootstrap strips stale managed entries before writing fresh hooks.
 
-If you prefer to work from a clone:
+From a clone:
 
 ```bash
 git clone https://github.com/theocarranza/codex-workflows-plugin.git
 cd codex-workflows-plugin
-python3 -m scripts.installer.bootstrap --target all-agents
+python3 -m scripts.installer.bootstrap --target all-agents --dest /path/to/your/project
 ```
-
-Passing `--dest` also syncs `.agent/workflows/*.md` and `.agent/rules/*.md` into the project, and merges an `agentic-orchestrator` MCP server entry into the project's `.mcp.json`.
 
 ### Dry-run
 
-Preview the merged hook config without writing any files:
+Preview the merged hook config without writing files:
 
 ```bash
-python3 ~/.codex-workflows/scripts/installer/cli.py --target claude --output /tmp/preview.json
+python3 -m scripts.installer.cli --target claude --output /tmp/preview.json
 ```
 
 ### Updating the plugin
 
-Re-run the one-step installer. It replaces `~/.codex-workflows/`, refreshes the Claude plugin cache, and re-wires all hooks in one step:
+Re-run the one-step installer against the same `--dest`. It replaces `<dest>/.codex-workflows/`, refreshes discovery trees, and re-wires project hooks:
 
 ```bash
-curl -fsSL https://github.com/theocarranza/codex-workflows-plugin/releases/latest/download/install.sh | bash
+curl -fsSL https://github.com/theocarranza/codex-workflows-plugin/releases/latest/download/install.sh \
+  | bash -s -- --dest /path/to/your/project
 ```
 
 ### Uninstalling the plugin
 
-Run the cleanup path to remove managed host hooks, plugin caches, marketplace entries, and the installed runtime:
-
 ```bash
-curl -fsSL https://github.com/theocarranza/codex-workflows-plugin/releases/latest/download/install.sh | bash -s -- --uninstall
+curl -fsSL https://github.com/theocarranza/codex-workflows-plugin/releases/latest/download/install.sh \
+  | bash -s -- --dest /path/to/your/project --uninstall
 ```
 
-Pass `--dest /path/to/project` to also remove generated project hook configs and `.agent` assets. Pass `--keep-runtime` only when you want to unwire hosts but keep `~/.codex-workflows/` for debugging.
+Removes managed project hooks, synced discovery/workflow assets, the orchestrator MCP entry, and `<dest>/.codex-workflows/` (unless `--keep-runtime`).
 
----
 
 ## Tests
 

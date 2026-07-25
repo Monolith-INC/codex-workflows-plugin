@@ -7,12 +7,11 @@ import zipfile
 from pathlib import Path
 
 from scripts.installer.bootstrap import (
-    INSTALL_DIR,
+    default_install_dir,
     install_from_source,
     install_from_zip,
-    register_claude_plugin,
-    register_codex_plugin,
 )
+from scripts.installer.cli import sync_host_discovery_assets
 
 
 PLUGIN_ROOT = Path(__file__).parent.parent.parent
@@ -56,11 +55,8 @@ class TestInstallFromSource(unittest.TestCase):
         self.assertFalse((self.dest / "stale.txt").exists())
 
     def test_installed_cli_hook_command_points_to_dest(self):
-        # When the CLI is run from the installed location, hook commands must
-        # reference the installed path — not the original source repo.
         install_from_source(PLUGIN_ROOT, self.dest)
 
-        import json
         import subprocess
 
         result = subprocess.run(
@@ -74,72 +70,27 @@ class TestInstallFromSource(unittest.TestCase):
         cmd = output["mergedConfig"]["codex-enforcer"]["PreToolUse"][0]["hooks"][0]["command"]
         self.assertIn(str(self.dest), cmd, "hook command should reference the installed dest, not the source repo")
 
-
     def test_copies_commands_dir(self):
         install_from_source(PLUGIN_ROOT, self.dest)
 
         self.assertTrue((self.dest / "commands" / "review-pr.md").exists())
 
 
-class TestRegisterClaudePlugin(unittest.TestCase):
-    def test_copies_skills_and_commands_into_claude_cache(self):
-        from unittest.mock import patch
-
-        with tempfile.TemporaryDirectory() as install_dir, tempfile.TemporaryDirectory() as fake_home:
-            root = Path(install_dir)
-            manifest = {
-                "name": "codex-workflows-plugin",
-                "version": "9.9.9-test",
-                "description": "test",
-                "author": {"name": "test"},
-            }
-            (root / ".codex-plugin").mkdir()
-            (root / ".codex-plugin" / "plugin.json").write_text(json.dumps(manifest), encoding="utf-8")
-            (root / "skills" / "review-pr").mkdir(parents=True)
-            (root / "skills" / "review-pr" / "manifest.json").write_text("{}", encoding="utf-8")
+class TestSyncHostDiscoveryAssets(unittest.TestCase):
+    def test_syncs_claude_and_agents_skills_and_commands(self):
+        with tempfile.TemporaryDirectory() as plugin, tempfile.TemporaryDirectory() as project:
+            root = Path(plugin)
+            (root / "skills" / "demo-skill").mkdir(parents=True)
+            (root / "skills" / "demo-skill" / "SKILL.md").write_text("# demo\n", encoding="utf-8")
             (root / "commands").mkdir()
-            (root / "commands" / "review-pr.md").write_text("# review-pr", encoding="utf-8")
-            (root / "scripts" / "adapters").mkdir(parents=True)
-            (root / "scripts" / "adapters" / "claude_adapter.py").write_text("# adapter", encoding="utf-8")
+            (root / "commands" / "demo.md").write_text("# demo cmd\n", encoding="utf-8")
 
-            fake_home_path = Path(fake_home)
-            with patch.object(Path, "home", return_value=fake_home_path):
-                self.assertTrue(register_claude_plugin(root))
+            dest = Path(project)
+            sync_host_discovery_assets(dest, root)
 
-            cache = fake_home_path / ".claude" / "plugins" / "cache" / "local" / "codex-workflows-plugin" / "9.9.9-test"
-            self.assertTrue((cache / "skills" / "review-pr" / "manifest.json").exists())
-            self.assertTrue((cache / "commands" / "review-pr.md").exists())
-            self.assertTrue((cache / "scripts" / "adapters" / "claude_adapter.py").exists())
-            self.assertTrue((cache / "plugin.json").exists())
-
-            registry = json.loads((fake_home_path / ".claude" / "plugins" / "installed_plugins.json").read_text())
-            self.assertIn("codex-workflows-plugin@local", registry["plugins"])
-
-
-class TestRegisterCodexPlugin(unittest.TestCase):
-    def test_writes_marketplace_entry(self):
-        from unittest.mock import patch
-
-        with tempfile.TemporaryDirectory() as install_dir, tempfile.TemporaryDirectory() as fake_home:
-            root = Path(install_dir)
-            manifest = {
-                "name": "codex-workflows-plugin",
-                "version": "9.9.9-test",
-                "interface": {"category": "Productivity"},
-            }
-            (root / ".codex-plugin").mkdir()
-            (root / ".codex-plugin" / "plugin.json").write_text(json.dumps(manifest), encoding="utf-8")
-
-            fake_home_path = Path(fake_home)
-            with patch.object(Path, "home", return_value=fake_home_path):
-                self.assertTrue(register_codex_plugin(root))
-
-            marketplace_path = fake_home_path / ".agents" / "plugins" / "marketplace.json"
-            marketplace = json.loads(marketplace_path.read_text(encoding="utf-8"))
-            names = [p["name"] for p in marketplace["plugins"]]
-            self.assertIn("codex-workflows-plugin", names)
-            entry = next(p for p in marketplace["plugins"] if p["name"] == "codex-workflows-plugin")
-            self.assertEqual(entry["source"]["path"], str(root))
+            self.assertTrue((dest / ".claude" / "skills" / "demo-skill" / "SKILL.md").exists())
+            self.assertTrue((dest / ".agents" / "skills" / "demo-skill" / "SKILL.md").exists())
+            self.assertTrue((dest / ".claude" / "commands" / "demo.md").exists())
 
 
 class TestInstallFromZip(unittest.TestCase):
@@ -181,6 +132,7 @@ class TestInstallFromZip(unittest.TestCase):
 class TestInstallCLI(unittest.TestCase):
     def _run(self, *args) -> tuple[int, str]:
         import subprocess
+
         result = subprocess.run(
             [sys.executable, "-m", "scripts.installer.bootstrap", *args],
             capture_output=True,
@@ -188,18 +140,49 @@ class TestInstallCLI(unittest.TestCase):
         )
         return result.returncode, result.stdout + result.stderr
 
+    def test_requires_dest(self):
+        code, output = self._run("--target", "claude")
+        self.assertNotEqual(code, 0)
+        self.assertIn("--dest", output)
+
     def test_missing_zip_returns_error(self):
         with tempfile.TemporaryDirectory() as dest:
             code, output = self._run("/nonexistent/plugin.zip", "--dest", dest)
             self.assertNotEqual(code, 0)
             self.assertIn("not found", output)
 
-    def test_install_from_source_via_cli(self):
+    def test_install_from_source_via_cli_uses_project_runtime(self):
         with tempfile.TemporaryDirectory() as dest:
-            code, output = self._run("--install-dir", dest)
-            self.assertEqual(code, 0)
-            self.assertIn("Installed to", output)
-            self.assertTrue((Path(dest) / "scripts").is_dir())
+            project = Path(dest)
+            code, output = self._run("--dest", str(project), "--target", "claude")
+            self.assertEqual(code, 0, output)
+            runtime = default_install_dir(project)
+            self.assertTrue((runtime / "scripts").is_dir())
+            self.assertTrue((project / ".claude" / "settings.json").exists())
+            self.assertTrue((project / ".claude" / "skills").is_dir())
+            self.assertTrue((project / ".agents" / "skills").is_dir())
+            self.assertTrue((project / ".claude" / "commands").is_dir())
+
+    def test_project_install_does_not_write_home_hooks(self):
+        import os
+        import subprocess
+
+        with tempfile.TemporaryDirectory() as temp_home, tempfile.TemporaryDirectory() as dest:
+            home = Path(temp_home)
+            project = Path(dest)
+            result = subprocess.run(
+                [sys.executable, "-m", "scripts.installer.bootstrap", "--dest", str(project), "--target", "all-agents"],
+                capture_output=True,
+                text=True,
+                env={**os.environ, "HOME": str(home)},
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertFalse((home / ".claude" / "settings.json").exists())
+            self.assertFalse((home / ".cursor" / "hooks.json").exists())
+            self.assertFalse((home / ".codex-workflows").exists())
+            self.assertFalse((home / ".claude" / "plugins" / "installed_plugins.json").exists())
+            self.assertTrue((project / ".claude" / "settings.json").exists())
+            self.assertTrue((project / ".cursor" / "hooks.json").exists())
 
 
 if __name__ == "__main__":

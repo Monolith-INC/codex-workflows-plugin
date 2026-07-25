@@ -135,6 +135,39 @@ class TestPolicyEngine(unittest.TestCase):
 
         self.assertFalse(decision.is_denied())
 
+    def test_ledger_skip_bypasses_session_but_keeps_vault_delete_guard(self):
+        write_event = CanonicalToolEvent(
+            client="codex",
+            tool_name="write_to_file",
+            file_path="/tmp/project/lib/utils.dart",
+            session_active=False,
+            ledger_skipped=True,
+        )
+        delete_event = CanonicalToolEvent(
+            client="cursor",
+            tool_name="Delete",
+            file_path="/tmp/project/AI_Codex/Tickets/Active/task-123.md",
+            vault_dir="/tmp/project/AI_Codex",
+            ledger_skipped=True,
+        )
+
+        self.assertFalse(evaluate(write_event).is_denied())
+        self.assertTrue(evaluate(delete_event).is_denied())
+
+    def test_session_denial_reason_is_surfaced(self):
+        event = CanonicalToolEvent(
+            client="codex",
+            tool_name="write_to_file",
+            file_path="/tmp/project/lib/utils.dart",
+            session_active=False,
+            session_denial_reason="Write blocked. Open session is stale.",
+        )
+
+        decision = evaluate(event)
+
+        self.assertTrue(decision.is_denied())
+        self.assertEqual(decision.reason, "Write blocked. Open session is stale.")
+
 
 if __name__ == "__main__":
     unittest.main()

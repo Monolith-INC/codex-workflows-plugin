@@ -1,0 +1,8 @@
+{
+  "name": "resume-ledger",
+  "version": "1.0.0",
+  "description": "Restore workflow ledger hook enforcement after /skip-ledger.",
+  "input_schema": { "type": "object", "properties": {} },
+  "output_signature": { "type": "object", "properties": {} },
+  "tools": []
+}

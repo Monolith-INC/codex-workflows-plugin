@@ -52,15 +52,19 @@ Every agent tool call is intercepted by `skills/codex_workflows/scripts/codex_en
 
 **Policy engine** (`scripts/policy/engine.py`) — pure function `evaluate(event) -> PolicyDecision`. Contains all enforcement rules:
 - Destructive `rm` commands against the AI Codex vault are denied
-- Code writes require an active Agent Session log in `AI_Codex/Agent_Sessions/` for today
+- Code writes require a continuable open Agent Session (`next: null`) under `AI_Codex/Agent_Sessions/` or `AI_Codex/Projects/*/Agent_Sessions/` (same branch, max 8 hours); otherwise close and open a new session
+- `/skip-ledger` sets `{vault}/.codex_ledger_skip` to bypass session/ticket/branch/YouTrack ledger guards until `/resume-ledger` (vault delete protection remains)
+- Mutating git on `main`/`master`/`develop`/`unstable` is denied; create a `feature/`/`bugfix/`/`techdebt/` branch first
 - Ticket moves follow strict lifecycle: `Ready → Active → Closed` (tasks) or `Ready → Active → Resolved` (bugfixes, detected by `bug` in filename)
 - Starting a ticket enforces: no other ticket already active, branch is not the integration base, branch is synced with `origin/<base>`, no unmerged commits from another feature branch
 
-**Git utilities** (`scripts/policy/git_utils.py`) — called only during ticket-start checks; detects the integration branch, fetches origin, computes divergence.
+**Session / ledger helpers** — `scripts/policy/session_gate.py`, `ledger_skip.py`, `git_branch_guard.py` support the hook runtime.
+
+**Git utilities** (`scripts/policy/git_utils.py`) — called during ticket-start checks and branch guards; detects the integration branch, fetches origin, computes divergence.
 
 **YouTrack integration** (`scripts/ticket_runtime.py`) — validates that the agent made the required YouTrack state transitions (`update_issue` MCP calls) before allowing ticket lifecycle moves. Reads the Codex transcript (`.jsonl`) to verify calls appeared in-session.
 
-**Installer** (`scripts/installer/`) — `cli.py::install()` generates and merges the hook config JSON for each target host, then optionally syncs `.agent/workflows/` and `.agent/rules/` markdown into a destination project.
+**Installer** (`scripts/installer/`) — project-only. Requires `--dest`; runtime under `<dest>/.codex-workflows`; wires project hook configs; syncs `.claude/skills|commands`, `.agents/skills`, and `.agent/workflows|rules`. Global/`$HOME` install was removed.
 
 **Profiles** (`scripts/profiles/`) — `WorkspaceProfile` dataclasses capturing per-project conventions (vault name, branch, verify command). Currently scaffolded but not yet wired into the runtime (see TODO in `base.py`).
 
@@ -76,4 +80,4 @@ Every agent tool call is intercepted by `skills/codex_workflows/scripts/codex_en
 
 ### Markdown access
 
-Markdown allowlisting was removed in 0.5.6. `.md` reads are unrestricted by this plugin; writes still require an active Agent Session when they go through write tools. Bootstrap `--purge-allowlist` strips leftover managed hooks and deletes legacy `codex-workflow.config.json` allowlist companions.
+Markdown allowlisting was removed in 0.5.6. `.md` reads are unrestricted by this plugin; writes still require a continuable Agent Session when they go through write tools (unless `/skip-ledger` is active). Bootstrap `--purge-allowlist` strips leftover managed hooks and deletes legacy `codex-workflow.config.json` allowlist companions.

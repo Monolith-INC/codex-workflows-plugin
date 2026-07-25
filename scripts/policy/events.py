@@ -31,4 +31,6 @@ class CanonicalToolEvent:
     workspace_root: str = ""
     vault_dir: str = ""
     session_active: bool = True
+    session_denial_reason: str | None = None
     is_bugfix_ticket: bool = False
+    ledger_skipped: bool = False

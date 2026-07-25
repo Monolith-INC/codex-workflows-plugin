@@ -1,6 +1,16 @@
 ---
 name: bootstrap
-description: Initialize a repository-local AI Codex session and ledger.
+description: >-
+  Use when the user asks to install, wire, update, or uninstall the
+  codex-workflows-plugin into a project (local --dest install only).
 ---
 
-Bootstrap the repository-local `AI_Codex` session log and active work ledger before making implementation changes.
+# bootstrap
+
+Install this plugin into a **project** with `--dest`. Global install is not supported.
+
+```bash
+python3 -m scripts.installer.bootstrap --target all-agents --dest /path/to/project
+```
+
+Runtime lands at `<dest>/.codex-workflows/`. Discovery trees: `.claude/skills`, `.claude/commands`, `.agents/skills`.
