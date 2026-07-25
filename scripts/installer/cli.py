@@ -43,14 +43,14 @@ def _hook_command(target: Target, plugin_root: Path) -> str:
     return f"python3 {script}"
 
 
-def sync_shared_assets(dest_root: str | Path) -> None:
+def sync_shared_assets(dest_root: str | Path, plugin_root: Path | None = None) -> None:
     """Copies workflow and rules markdown files from the plugin into a destination project.
 
     Prefers ``.agent/workflows`` and ``.agent/rules`` under the plugin root.
     Falls back to ``skills/codex_workflows/resources`` (workflows + templates)
     and ``skills/codex_workflows/rules`` when the canonical ``.agent/`` tree is absent.
     """
-    plugin_root = _plugin_root()
+    plugin_root = plugin_root or _plugin_root()
     dest = Path(dest_root)
 
     workflow_src = plugin_root / ".agent" / "workflows"
@@ -76,6 +76,38 @@ def sync_shared_assets(dest_root: str | Path) -> None:
                 shutil.copy2(item, dst_dir / item.name)
             elif item.is_dir():
                 shutil.copytree(item, dst_dir / item.name, dirs_exist_ok=True)
+
+
+def sync_host_discovery_assets(dest_root: str | Path, plugin_root: Path | None = None) -> None:
+    """Sync skills/commands into project-local Claude and Antigravity discovery trees.
+
+    Claude discovers ``.claude/skills/*/SKILL.md`` and ``.claude/commands/*.md``.
+    Antigravity discovers ``.agents/skills/<name>/``.
+    """
+    plugin_root = plugin_root or _plugin_root()
+    dest = Path(dest_root)
+    skills_src = plugin_root / "skills"
+    if skills_src.is_dir():
+        for skill_dir in skills_src.iterdir():
+            if not skill_dir.is_dir():
+                continue
+            for target_root in (dest / ".claude" / "skills", dest / ".agents" / "skills"):
+                target = target_root / skill_dir.name
+                if target.exists():
+                    shutil.rmtree(target)
+                shutil.copytree(
+                    skill_dir,
+                    target,
+                    ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+                )
+
+    commands_src = plugin_root / "commands"
+    if commands_src.is_dir():
+        commands_dst = dest / ".claude" / "commands"
+        commands_dst.mkdir(parents=True, exist_ok=True)
+        for item in commands_src.iterdir():
+            if item.is_file() and item.suffix == ".md":
+                shutil.copy2(item, commands_dst / item.name)
 
 
 def write_target_config(
@@ -235,7 +267,8 @@ def install(
         )
 
     if dest_root is not None:
-        sync_shared_assets(dest_root)
+        sync_shared_assets(dest_root, plugin_root)
+        sync_host_discovery_assets(dest_root, plugin_root)
         if merged_config is not None and config_paths:
             write_target_config(merged_config, config_paths[0], dest_root)
 
@@ -259,7 +292,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--dest",
-        help="Destination project root. When set, writes the hook config and syncs .agent/workflows/ and .agent/rules/ to the project.",
+        help="Destination project root. When set, writes hook config and syncs .agent/, .claude/, and .agents/ discovery assets.",
     )
     args = parser.parse_args()
 

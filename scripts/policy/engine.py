@@ -1,4 +1,5 @@
 import os
+import shlex
 from .events import CanonicalToolEvent, PolicyDecision
 
 _VAULT_DELETE_TOOLS = frozenset({"Delete", "delete_file", "remove_file"})
@@ -15,6 +16,9 @@ def evaluate(event: CanonicalToolEvent) -> PolicyDecision:
             "Destructive deletions are forbidden on the AI Codex vault. Use 'mv' to change status."
         )
 
+    if event.ledger_skipped:
+        return PolicyDecision.allow()
+
     ticket_decision = _evaluate_ticket_paths(event)
     if ticket_decision.is_denied():
         return ticket_decision
@@ -27,7 +31,11 @@ def evaluate(event: CanonicalToolEvent) -> PolicyDecision:
     if _requires_session(event) and not event.session_active and not _is_ticket_path(event) and "Agent_Sessions" not in (event.file_path or ""):
         vault_name = event.vault_dir.rsplit("/", 1)[-1] if event.vault_dir else "AI_Codex"
         return PolicyDecision.deny(
-            f"Write blocked. You must initialize today's Agent Session log in {vault_name}/Agent_Sessions/ before making code modifications."
+            event.session_denial_reason
+            or (
+                f"Write blocked. You must initialize today's Agent Session log in {vault_name}/Agent_Sessions/ "
+                "before making code modifications."
+            )
         )
 
     return PolicyDecision.allow()
@@ -130,9 +138,14 @@ def _is_destructive_command(event: CanonicalToolEvent) -> bool:
         event.vault_dir.rsplit("/", 1)[-1] if event.vault_dir else "",
         "AI_Codex",
     }
-    if any(marker and marker in command for marker in vault_markers):
-        return "rm " in command or "rmdir " in command
-    return False
+    if not any(marker and marker in command for marker in vault_markers):
+        return False
+    # Token match so prose like `ledger_skip` / "`rm`" in docs does not false-positive.
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        tokens = command.split()
+    return any(tok in {"rm", "rmdir"} or tok.startswith("rmdir") for tok in tokens)
 
 
 def _is_vault_destructive_deletion(event: CanonicalToolEvent) -> bool:

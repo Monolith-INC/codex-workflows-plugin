@@ -11,18 +11,18 @@ trap cleanup EXIT
 
 usage() {
   cat <<'EOF'
-Install codex-workflows-plugin from the latest GitHub release.
+Install codex-workflows-plugin into a project (local install only).
 
 Usage:
-  install.sh [bootstrap args]
+  install.sh --dest /path/to/project [bootstrap args]
 
 Examples:
-  curl -fsSL https://github.com/theocarranza/codex-workflows-plugin/releases/latest/download/install.sh | bash
   curl -fsSL https://github.com/theocarranza/codex-workflows-plugin/releases/latest/download/install.sh | bash -s -- --dest /path/to/project
-  curl -fsSL https://github.com/theocarranza/codex-workflows-plugin/releases/latest/download/install.sh | bash -s -- --uninstall
+  curl -fsSL .../install.sh | bash -s -- --dest /path/to/project --target claude
+  curl -fsSL .../install.sh | bash -s -- --dest /path/to/project --uninstall
 
 Environment:
-  CODEX_WORKFLOWS_VERSION      Release tag to install, for example v0.5.1. Defaults to latest.
+  CODEX_WORKFLOWS_VERSION      Release tag to install, for example v0.5.7. Defaults to latest.
   CODEX_WORKFLOWS_RELEASE_ZIP  Local release zip path, used by tests or offline installs.
   CODEX_WORKFLOWS_REPO         GitHub repo slug. Defaults to theocarranza/codex-workflows-plugin.
 EOF
@@ -113,6 +113,12 @@ PY
 if has_arg "--help" "$@" || has_arg "-h" "$@"; then
   usage
   exit 0
+fi
+
+if ! has_arg "--dest" "$@"; then
+  usage
+  echo "error: --dest PROJECT is required (local/project install only)." >&2
+  exit 1
 fi
 
 ZIP_PATH="$TMP_DIR/codex-workflows-plugin.zip"

@@ -7,6 +7,19 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.5.7] - 2026-07-25
+
+### Added
+- Session write gate continuity: open sessions (`next: null`) under `Agent_Sessions/` or `Projects/*/Agent_Sessions/` may continue when the same branch matches and the session is under 8 hours old; otherwise close and open a new session.
+- `/skip-ledger` and `/resume-ledger` commands/skills: create or clear `{vault}/.codex_ledger_skip` to bypass session, ticket, YouTrack transcript, and protected-branch git guards for the session (vault destructive-delete protection stays on).
+- Protected-branch git guard: block mutating git on `main`/`master`/`develop`/`unstable`; require creating a ticket branch (`feature/` / `bugfix/` / `techdebt/`) before commits and other mutations.
+- Project-local installer discovery sync for Claude (`.claude/skills`, `.claude/commands`) and Antigravity (`.agents/skills`).
+
+### Changed
+- **BREAKING: global install removed.** Bootstrap/`install.sh` require `--dest`; runtime defaults to `<dest>/.codex-workflows`; home hook wiring and home plugin registration are gone. Skills/commands sync into project `.claude/` and `.agents/skills/`.
+- Session denial messages now explain stale/mismatched open sessions instead of only requiring a same-day file.
+- Plugin metadata bumped to `0.5.7` across Codex and Claude plugin manifests.
+
 ## [0.5.6] — 2026-07-25
 
 ### Changed

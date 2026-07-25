@@ -156,6 +156,11 @@ def _run_purge(
 
 
 def _hook_config_paths(*, dest: Path | None, home: Path) -> list[Path]:
+    """Return hook config paths to scan.
+
+    When ``dest`` is set (project-only install), only project-relative configs are
+    considered. Home/global paths are skipped.
+    """
     paths: list[Path] = []
     for target in (
         Target.CODEX,
@@ -165,7 +170,13 @@ def _hook_config_paths(*, dest: Path | None, home: Path) -> list[Path]:
         Target.CLAUDE,
         Target.CURSOR,
     ):
-        # Prefer path relative to injected home for Claude/Cursor/Gemini globals in tests.
+        if dest is not None:
+            project_root = dest.expanduser().resolve()
+            for relative in target_config_paths(target):
+                paths.append(project_root / relative)
+            continue
+
+        # Legacy scan without --dest (kept for library callers / migration tools).
         if target == Target.CLAUDE:
             paths.append(home / ".claude" / "settings.json")
         elif target == Target.CURSOR:
@@ -181,20 +192,13 @@ def _hook_config_paths(*, dest: Path | None, home: Path) -> list[Path]:
             if discovered is not None:
                 paths.append(discovered)
 
-        if dest is not None:
-            project_root = dest.expanduser().resolve()
-            for relative in target_config_paths(target):
-                paths.append(project_root / relative)
-
-    # Deduplicate while preserving order
     seen: set[Path] = set()
     unique: list[Path] = []
     for path in paths:
-        resolved = path
-        if resolved in seen:
+        if path in seen:
             continue
-        seen.add(resolved)
-        unique.append(resolved)
+        seen.add(path)
+        unique.append(path)
     return unique
 
 

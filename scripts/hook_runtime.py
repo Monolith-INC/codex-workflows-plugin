@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import subprocess
 import sys
 from datetime import datetime
@@ -30,6 +29,9 @@ from scripts.ticket_runtime import (
     infer_is_bugfix_ticket,
 )
 from scripts.policy import CanonicalToolEvent, PolicyDecision, evaluate
+from scripts.policy.git_branch_guard import evaluate_git_branch_guard
+from scripts.policy.ledger_skip import is_ledger_skipped
+from scripts.policy.session_gate import evaluate_session_gate
 from scripts.policy.shell_utils import extract_shell_write_targets
 
 LOG_FILE = "/tmp/codex_hook_debug.log"
@@ -69,30 +71,6 @@ def get_vault_dir(project_root: str) -> str:
 
 def get_today_date_str() -> str:
     return datetime.now().strftime("%Y-%m-%d")
-
-
-def has_active_session_today(vault_dir: str) -> bool:
-    sessions_dir = os.path.join(vault_dir, "Agent_Sessions")
-    if not os.path.exists(sessions_dir):
-        log_debug(f"Sessions directory {sessions_dir} does not exist.")
-        return False
-
-    today_prefix = get_today_date_str()
-    log_debug(f"Checking for sessions starting with {today_prefix}")
-
-    for filename in os.listdir(sessions_dir):
-        if filename.startswith(today_prefix) and filename.endswith(".md"):
-            filepath = os.path.join(sessions_dir, filename)
-            try:
-                with open(filepath, "r", encoding="utf-8") as file:
-                    content = file.read()
-                if re.search(r"next:\s*(null|['\"]['\"]|~|)\s*$", content, re.MULTILINE):
-                    log_debug(f"Found active session record: {filename}")
-                    return True
-            except Exception as exc:
-                log_debug(f"Error reading session file {filename}: {exc}")
-
-    return False
 
 
 def select_adapter(client: str) -> tuple[Callable[[dict[str, Any], str, str], CanonicalToolEvent], AdapterFormatter]:
@@ -141,9 +119,18 @@ def run(client: str, input_data: dict[str, Any]) -> int:
         or {}
     )
     file_path = codex_event.file_path or arguments.get("AbsolutePath") or arguments.get("TargetFile") or arguments.get("path") or arguments.get("file") or ""
+    ledger_skipped = is_ledger_skipped(vault_dir)
+    session_result = evaluate_session_gate(vault_dir, project_root)
+    session_active = session_result.active or ledger_skipped
 
-    if tool_name in {"run_command", "Shell", "Bash"}:
+    if tool_name in {"run_command", "run_shell_command", "Shell", "Bash"}:
         cmd = codex_event.command or arguments.get("CommandLine") or arguments.get("command") or ""
+        if not ledger_skipped:
+            branch_decision = evaluate_git_branch_guard(cmd, project_root)
+            if branch_decision.is_denied():
+                log_debug(f"DENIED: {branch_decision.reason}")
+                emit_decision(client, PolicyDecision.deny(branch_decision.reason or "Denied"))
+                return 0
         destructive_decision = evaluate(
             CanonicalToolEvent(
                 client=client,
@@ -151,6 +138,7 @@ def run(client: str, input_data: dict[str, Any]) -> int:
                 command=cmd,
                 workspace_root=project_root,
                 vault_dir=vault_dir,
+                ledger_skipped=ledger_skipped,
             )
         )
         if destructive_decision.is_denied():
@@ -199,6 +187,7 @@ def run(client: str, input_data: dict[str, Any]) -> int:
                     destination_path=abs_dst,
                     workspace_root=project_root,
                     vault_dir=vault_dir,
+                    ledger_skipped=ledger_skipped,
                     is_bugfix_ticket=is_bugfix,
                 )
             )
@@ -208,7 +197,7 @@ def run(client: str, input_data: dict[str, Any]) -> int:
                 return 0
 
             issue_id = get_youtrack_issue_id_from_ticket(abs_src)
-            if issue_id:
+            if issue_id and not ledger_skipped:
                 transcript_path = input_data.get("transcriptPath")
                 if "Tickets/Active/" in abs_dst:
                     yt_result = check_youtrack_state_in_transcript(
@@ -260,7 +249,9 @@ def run(client: str, input_data: dict[str, Any]) -> int:
                     file_path=abs_target,
                     workspace_root=project_root,
                     vault_dir=vault_dir,
-                    session_active=has_active_session_today(vault_dir),
+                    session_active=session_active,
+                    session_denial_reason=session_result.reason,
+                    ledger_skipped=ledger_skipped,
                     is_bugfix_ticket=infer_is_bugfix_ticket(abs_target),
                 )
             )
@@ -276,7 +267,9 @@ def run(client: str, input_data: dict[str, Any]) -> int:
             file_path=file_path,
             workspace_root=project_root,
             vault_dir=vault_dir,
-            session_active=has_active_session_today(vault_dir),
+            session_active=session_active,
+            session_denial_reason=session_result.reason,
+            ledger_skipped=ledger_skipped,
             is_bugfix_ticket=infer_is_bugfix_ticket(file_path, arguments.get("CodeContent")),
         )
     )
@@ -294,7 +287,9 @@ def run(client: str, input_data: dict[str, Any]) -> int:
                 file_path=file_path,
                 workspace_root=project_root,
                 vault_dir=vault_dir,
-                session_active=has_active_session_today(vault_dir),
+                session_active=session_active,
+                session_denial_reason=session_result.reason,
+                ledger_skipped=ledger_skipped,
                 is_bugfix_ticket=infer_is_bugfix_ticket(file_path, arguments.get("CodeContent")),
             )
         )
@@ -306,7 +301,7 @@ def run(client: str, input_data: dict[str, Any]) -> int:
         abs_file_path = os.path.abspath(file_path)
         if any(marker in abs_file_path for marker in ["Tickets/Active/", "Tickets/Closed/", "Tickets/Resolved/"]):
             issue_id = get_youtrack_issue_id_from_write(abs_file_path, arguments)
-            if issue_id:
+            if issue_id and not ledger_skipped:
                 transcript_path = input_data.get("transcriptPath")
                 if "Tickets/Active/" in abs_file_path:
                     expected_states = ["In Progress"]

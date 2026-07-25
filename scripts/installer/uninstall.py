@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from .targets import Target, target_config_paths, target_global_config_path
+from .targets import Target, target_config_paths
 
 
 PLUGIN_NAME = "codex-workflows-plugin"
@@ -30,26 +30,21 @@ class UninstallPlan:
 def uninstall(
     install_dir: Path,
     *,
-    dest: Path | None = None,
+    dest: Path,
     keep_runtime: bool = False,
     dry_run: bool = False,
 ) -> UninstallPlan:
+    """Remove project-local install artifacts. Global/home cleanup is not performed."""
     plan = UninstallPlan()
     install_dir = install_dir.expanduser().resolve()
-    plugin_name, version, author = _manifest_fields(install_dir)
+    project_root = dest.expanduser().resolve()
 
-    for config_path in _global_hook_paths():
-        _plan_clean_hook_config(plan, config_path, prune_stop=Path.home())
+    for config_path in _project_hook_paths(project_root):
+        _plan_clean_hook_config(plan, config_path, prune_stop=project_root)
 
-    if dest is not None:
-        project_root = dest.expanduser().resolve()
-        for config_path in _project_hook_paths(project_root):
-            _plan_clean_hook_config(plan, config_path, prune_stop=project_root)
-        _plan_project_asset_cleanup(plan, project_root, install_dir)
-
-    _plan_claude_registry_cleanup(plan, plugin_name)
-    _plan_codex_marketplace_cleanup(plan, plugin_name)
-    _plan_plugin_cache_cleanup(plan, plugin_name, version, author)
+    _plan_project_asset_cleanup(plan, project_root, install_dir)
+    _plan_project_discovery_cleanup(plan, project_root, install_dir)
+    _plan_mcp_cleanup(plan, project_root)
 
     if not keep_runtime:
         _plan_remove_path(plan, install_dir, prune_stop=install_dir.parent)
@@ -121,40 +116,6 @@ def _is_empty(value: Any) -> bool:
     return isinstance(value, dict) and set(value) <= {"enabled", "version"}
 
 
-def _manifest_fields(install_dir: Path) -> tuple[str, str | None, str]:
-    manifest_path = install_dir / ".codex-plugin" / "plugin.json"
-    if not manifest_path.exists():
-        manifest_path = install_dir / "plugin.json"
-    if not manifest_path.exists():
-        return PLUGIN_NAME, None, "local"
-    try:
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-        return PLUGIN_NAME, None, "local"
-
-    name = manifest.get("name") or PLUGIN_NAME
-    version = manifest.get("version")
-    author_value = manifest.get("author")
-    author = author_value.get("name", "local") if isinstance(author_value, dict) else "local"
-    return name, version, author
-
-
-def _global_hook_paths() -> list[Path]:
-    paths = []
-    for target in (
-        Target.CODEX,
-        Target.GEMINI,
-        Target.ANTIGRAVITY,
-        Target.ANTIGRAVITY_CLI,
-        Target.CLAUDE,
-        Target.CURSOR,
-    ):
-        path = target_global_config_path(target)
-        if path is not None:
-            paths.append(path)
-    return paths
-
-
 def _project_hook_paths(project_root: Path) -> list[Path]:
     paths = []
     for target in (
@@ -191,64 +152,6 @@ def _plan_clean_hook_config(plan: UninstallPlan, config_path: Path, *, prune_sto
         plan.messages.append(f"Write cleaned config: {config_path}")
 
 
-def _plan_claude_registry_cleanup(plan: UninstallPlan, plugin_name: str) -> None:
-    registry_path = Path.home() / ".claude" / "plugins" / "installed_plugins.json"
-    if not registry_path.exists():
-        return
-    try:
-        registry = json.loads(registry_path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-        plan.messages.append(f"Skipped invalid JSON registry: {registry_path}")
-        return
-
-    plugins = registry.get("plugins")
-    plugin_key = f"{plugin_name}@local"
-    if not isinstance(plugins, dict) or plugin_key not in plugins:
-        return
-
-    cleaned = dict(registry)
-    cleaned_plugins = dict(plugins)
-    cleaned_plugins.pop(plugin_key, None)
-    cleaned["plugins"] = cleaned_plugins
-    plan.write_json[registry_path] = cleaned
-    plan.messages.append(f"Write cleaned Claude registry: {registry_path}")
-
-
-def _plan_codex_marketplace_cleanup(plan: UninstallPlan, plugin_name: str) -> None:
-    marketplace_path = Path.home() / ".agents" / "plugins" / "marketplace.json"
-    if not marketplace_path.exists():
-        return
-    try:
-        marketplace = json.loads(marketplace_path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-        plan.messages.append(f"Skipped invalid JSON marketplace: {marketplace_path}")
-        return
-
-    plugins = marketplace.get("plugins")
-    if not isinstance(plugins, list):
-        return
-    cleaned_plugins = [plugin for plugin in plugins if not (isinstance(plugin, dict) and plugin.get("name") == plugin_name)]
-    if cleaned_plugins == plugins:
-        return
-    cleaned = dict(marketplace)
-    cleaned["plugins"] = cleaned_plugins
-    plan.write_json[marketplace_path] = cleaned
-    plan.messages.append(f"Write cleaned Codex marketplace: {marketplace_path}")
-
-
-def _plan_plugin_cache_cleanup(plan: UninstallPlan, plugin_name: str, version: str | None, author: str) -> None:
-    home = Path.home()
-    _plan_remove_path(plan, home / ".claude" / "plugins" / "cache" / "local" / plugin_name, prune_stop=home)
-    _plan_remove_path(plan, home / ".cursor" / "plugins" / "cache" / "local" / plugin_name, prune_stop=home)
-    if version:
-        _plan_remove_path(plan, home / ".claude" / "plugins" / "cache" / "local" / plugin_name / version, prune_stop=home)
-        _plan_remove_path(plan, home / ".cursor" / "plugins" / "cache" / "local" / plugin_name / version, prune_stop=home)
-    _plan_remove_path(plan, home / ".gemini" / "antigravity-ide" / "plugins" / f"{author}.{plugin_name}.{plugin_name}", prune_stop=home)
-    _plan_remove_path(plan, home / ".gemini" / "config" / "plugins" / plugin_name, prune_stop=home)
-    _plan_remove_path(plan, home / ".codex" / "plugins" / "cache" / "local" / plugin_name, prune_stop=home)
-    _plan_remove_path(plan, home / ".codex" / "plugins" / "cache" / "personal" / plugin_name, prune_stop=home)
-
-
 def _plan_project_asset_cleanup(plan: UninstallPlan, project_root: Path, install_dir: Path) -> None:
     asset_root = install_dir / ".agent"
     if not asset_root.is_dir():
@@ -263,6 +166,51 @@ def _plan_project_asset_cleanup(plan: UninstallPlan, project_root: Path, install
             if source_file.is_file():
                 relative = source_file.relative_to(source_dir)
                 _plan_remove_path(plan, project_dir / relative, prune_stop=project_root)
+
+
+def _plan_project_discovery_cleanup(plan: UninstallPlan, project_root: Path, install_dir: Path) -> None:
+    skills_src = install_dir / "skills"
+    skill_names: set[str] = set()
+    if skills_src.is_dir():
+        skill_names = {p.name for p in skills_src.iterdir() if p.is_dir()}
+
+    for root_name in (".claude/skills", ".agents/skills"):
+        root = project_root / root_name
+        if not root.is_dir():
+            continue
+        for child in root.iterdir():
+            if child.is_dir() and child.name in skill_names:
+                _plan_remove_path(plan, child, prune_stop=project_root)
+
+    commands_src = install_dir / "commands"
+    commands_dst = project_root / ".claude" / "commands"
+    if commands_src.is_dir() and commands_dst.is_dir():
+        for item in commands_src.iterdir():
+            if item.is_file() and item.suffix == ".md":
+                _plan_remove_path(plan, commands_dst / item.name, prune_stop=project_root)
+
+
+def _plan_mcp_cleanup(plan: UninstallPlan, project_root: Path) -> None:
+    mcp_path = project_root / ".mcp.json"
+    if not mcp_path.exists():
+        return
+    try:
+        payload = json.loads(mcp_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        plan.messages.append(f"Skipped invalid JSON MCP config: {mcp_path}")
+        return
+    servers = payload.get("mcpServers")
+    if not isinstance(servers, dict) or "agentic-orchestrator" not in servers:
+        return
+    cleaned = dict(payload)
+    cleaned_servers = dict(servers)
+    cleaned_servers.pop("agentic-orchestrator", None)
+    cleaned["mcpServers"] = cleaned_servers
+    if not cleaned_servers and set(cleaned) <= {"mcpServers"}:
+        _plan_remove_path(plan, mcp_path, prune_stop=project_root)
+    else:
+        plan.write_json[mcp_path] = cleaned
+        plan.messages.append(f"Write cleaned MCP config: {mcp_path}")
 
 
 def _plan_remove_path(plan: UninstallPlan, path: Path, *, prune_stop: Path) -> None:
