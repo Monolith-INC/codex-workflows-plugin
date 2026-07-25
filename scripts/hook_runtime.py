@@ -30,6 +30,7 @@ from scripts.ticket_runtime import (
     infer_is_bugfix_ticket,
 )
 from scripts.policy import CanonicalToolEvent, PolicyDecision, evaluate
+from scripts.policy.shell_utils import extract_shell_write_targets
 
 LOG_FILE = "/tmp/codex_hook_debug.log"
 
@@ -256,6 +257,30 @@ def run(client: str, input_data: dict[str, Any]) -> int:
                         log_debug(f"DENIED: {reason}")
                         emit_decision(client, PolicyDecision.deny(reason))
                         return 0
+
+        for target in extract_shell_write_targets(cmd):
+            abs_target = (
+                os.path.abspath(target)
+                if os.path.isabs(target)
+                else os.path.abspath(os.path.join(project_root, target))
+            )
+            target_markdown_allowed = is_allowed_markdown(abs_target, vault_dir, project_root)
+            write_decision = evaluate(
+                CanonicalToolEvent(
+                    client=client,
+                    tool_name="Write",
+                    file_path=abs_target,
+                    workspace_root=project_root,
+                    vault_dir=vault_dir,
+                    markdown_allowed=target_markdown_allowed,
+                    session_active=has_active_session_today(vault_dir),
+                    is_bugfix_ticket=infer_is_bugfix_ticket(abs_target),
+                )
+            )
+            if write_decision.is_denied():
+                log_debug(f"DENIED: {write_decision.reason}")
+                emit_decision(client, PolicyDecision.deny(write_decision.reason or "Denied"))
+                return 0
 
     markdown_allowed = is_allowed_markdown(file_path, vault_dir, project_root)
     file_decision = evaluate(
