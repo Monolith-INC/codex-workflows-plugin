@@ -1,0 +1,25 @@
+{
+  "name": "feature-implementation",
+  "version": "1.0.0",
+  "description": "Plan and implement an Active Feature with stacked Feature and User Story branches.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "feature_id": {
+        "type": "string",
+        "description": "Feature identifier (Azure DevOps ID, vault path, or name)."
+      }
+    },
+    "required": ["feature_id"]
+  },
+  "output_signature": {
+    "type": "object",
+    "properties": {
+      "feature_id": { "type": "string" },
+      "plan_path": { "type": "string" },
+      "feature_branch": { "type": "string" },
+      "mode": { "type": "string" }
+    }
+  },
+  "tools": []
+}

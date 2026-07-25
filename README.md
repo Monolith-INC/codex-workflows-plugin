@@ -35,6 +35,7 @@ skills/                   # Skill folders + manifest.json for orchestrator MCP d
 
 | Skill / Command | Description |
 |---|---|
+| `feature-implementation` | Plan and implement an Active Feature with stacked Feature + User Story branches (Story→Feature→trunk). |
 | `start-ticket` | Validates and activates a ticket from `Ready/` to `Active/`, enforcing git safety and YouTrack state. |
 | `resolve-ticket` | Actor-Critic resolution report grounded on specs, then archive; enforces YouTrack timer stop and spent time. |
 | `commit-prep` | Guides atomic commits following conventional-commit conventions. |
