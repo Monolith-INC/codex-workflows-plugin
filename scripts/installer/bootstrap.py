@@ -368,7 +368,23 @@ def wire(install_dir: Path, target: str, project_dest: str | None) -> int:
     When project_dest is None the installer writes to each host's machine-global
     config location (e.g. ~/.claude/settings.json, ~/Antigravity_IDE/.agents/hooks.json).
     When project_dest is given, it writes project-level hook configs under that path.
+
+    Always purges legacy markdown-allowlist config files first so leftover
+    marketplace companions cannot keep blocking agent markdown access.
     """
+    from scripts.installer.purge_markdown_allowlist import (  # noqa: PLC0415
+        purge_allowlist_config_files,
+    )
+
+    dest_path = Path(project_dest).expanduser().resolve() if project_dest else None
+    purge_report = purge_allowlist_config_files(
+        dest=dest_path,
+        dry_run=False,
+        include_cwd=True,
+    )
+    for message in purge_report.messages:
+        print(message)
+
     # Load the installed cli module with its plugin_root resolved to install_dir.
     if str(install_dir) not in sys.path:
         sys.path.insert(0, str(install_dir))
@@ -585,6 +601,9 @@ def main() -> int:
             "  python3 bootstrap.py plugin.zip\n\n"
             "  # wire only (plugin already installed)\n"
             "  python3 bootstrap.py --target claude --dest /my/project\n\n"
+            "  # scan/purge legacy markdown-allowlist hooks and configs\n"
+            "  python3 -m scripts.installer.bootstrap --purge-allowlist --scan-only\n"
+            "  python3 -m scripts.installer.bootstrap --purge-allowlist --target all-agents\n\n"
             "  # uninstall and remove runtime\n"
             "  python3 -m scripts.installer.bootstrap --uninstall"
         ),
@@ -620,7 +639,21 @@ def main() -> int:
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="With --uninstall, print planned changes without modifying files.",
+        help="With --uninstall or --purge-allowlist, print planned changes without modifying files.",
+    )
+    parser.add_argument(
+        "--purge-allowlist",
+        action="store_true",
+        help=(
+            "Scan host configs for managed enforce hooks and delete legacy "
+            "markdown-allowlist config (codex-workflow.config.json). "
+            "Strips managed hook entries; pass --target to re-wire current hooks afterward."
+        ),
+    )
+    parser.add_argument(
+        "--scan-only",
+        action="store_true",
+        help="With --purge-allowlist, only report findings (implies dry-run).",
     )
     args = parser.parse_args()
 
@@ -639,6 +672,23 @@ def main() -> int:
         )
         print("\n".join(plan.messages) if plan.messages else "No managed plugin interventions found.")
         return 0
+
+    if args.purge_allowlist:
+        from scripts.installer.purge_markdown_allowlist import (  # noqa: PLC0415
+            purge_markdown_allowlist_artifacts,
+            scan_markdown_allowlist_artifacts,
+        )
+
+        dest_path = Path(args.dest).expanduser().resolve() if args.dest else None
+        dry = args.dry_run or args.scan_only
+        if args.scan_only:
+            report = scan_markdown_allowlist_artifacts(dest=dest_path)
+        else:
+            report = purge_markdown_allowlist_artifacts(dest=dest_path, dry_run=dry)
+        print("\n".join(report.messages) if report.messages else "No markdown-allowlist artifacts found.")
+        if args.scan_only or dry or not args.target:
+            return 0
+        # Fall through to install/wire with --target after purge.
 
     # ── install step ──────────────────────────────────────────────────────────
     script_dir = Path(__file__).parent.parent.parent.resolve()

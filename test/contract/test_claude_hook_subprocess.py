@@ -37,7 +37,7 @@ class TestClaudeHookSubprocess(unittest.TestCase):
             },
         )
 
-    def test_denied_markdown_read_uses_claude_permission_fields(self):
+    def test_markdown_read_outside_former_allowlist_is_allowed(self):
         response = self._run_hook(
             {
                 "tool_name": "Read",
@@ -45,10 +45,15 @@ class TestClaudeHookSubprocess(unittest.TestCase):
             }
         )
 
-        hook_output = response["hookSpecificOutput"]
-        self.assertEqual(hook_output["hookEventName"], "PreToolUse")
-        self.assertEqual(hook_output["permissionDecision"], "deny")
-        self.assertIn("permissionDecisionReason", hook_output)
+        self.assertEqual(
+            response,
+            {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "allow",
+                }
+            },
+        )
 
 
 if __name__ == "__main__":

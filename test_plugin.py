@@ -58,7 +58,7 @@ class TestCodexEnforceHook(unittest.TestCase):
         self.assertEqual(res["permissionDecision"], "deny")
         self.assertIn("Destructive deletions", res["reason"])
         
-    def test_deny_unallowed_markdown(self):
+    def test_allow_markdown_outside_former_allowlist(self):
         unallowed_path = os.path.join(self.test_dir, "docs", "notes.md")
         stdin = {
             "name": "view_file",
@@ -67,10 +67,9 @@ class TestCodexEnforceHook(unittest.TestCase):
             }
         }
         res = self.run_hook(stdin)
-        self.assertEqual(res["permissionDecision"], "deny")
-        self.assertIn("blocked", res["reason"])
+        self.assertEqual(res["permissionDecision"], "allow")
         
-    def test_allow_allowed_markdown(self):
+    def test_allow_claude_markdown(self):
         allowed_path = os.path.join(self.test_dir, "CLAUDE.md")
         stdin = {
             "name": "view_file",
@@ -124,7 +123,7 @@ class TestCodexEnforceHook(unittest.TestCase):
         self.assertEqual(res["permissionDecision"], "deny")
         self.assertIn("Write blocked. You must initialize today's Agent Session", res["reason"])
 
-    def test_deny_shell_redirect_to_forbidden_markdown(self):
+    def test_allow_shell_redirect_to_markdown_with_session(self):
         sessions_dir = os.path.join(self.vault_dir, "Agent_Sessions")
         os.makedirs(sessions_dir)
         today_str = datetime.now().strftime("%Y-%m-%d")
@@ -132,16 +131,15 @@ class TestCodexEnforceHook(unittest.TestCase):
         with open(session_file, "w") as f:
             f.write("---\nnext: null\n---")
 
-        unallowed_path = os.path.join(self.test_dir, "docs", "notes.md")
+        notes_path = os.path.join(self.test_dir, "docs", "notes.md")
         stdin = {
             "name": "run_command",
             "arguments": {
-                "CommandLine": f"echo secret > {unallowed_path}"
+                "CommandLine": f"echo secret > {notes_path}"
             }
         }
         res = self.run_hook(stdin)
-        self.assertEqual(res["permissionDecision"], "deny")
-        self.assertIn("blocked", res["reason"])
+        self.assertEqual(res["permissionDecision"], "allow")
 
     def test_allow_shell_redirect_with_session(self):
         sessions_dir = os.path.join(self.vault_dir, "Agent_Sessions")

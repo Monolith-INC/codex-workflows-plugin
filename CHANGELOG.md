@@ -7,6 +7,23 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.5.6] — 2026-07-25
+
+### Changed
+- **Markdown allowlist removed** from the policy engine and hook runtime. `.md` reads are no longer denied outside CLAUDE.md / `.agent/` / vault paths.
+- Bootstrap **`wire()`** always deletes leftover `.claude/codex-workflow.config.json` allowlist companions when found.
+- New bootstrap flags: `--purge-allowlist` (strip managed enforce hooks + remove allowlist configs) and `--scan-only` (report only).
+
+### Removed
+- `is_allowed_markdown` / `_is_markdown_denied` and the `markdown_allowed` event field.
+- Tracked `.claude/codex-workflow.config.json` allowlist config from this repository.
+
+### Migration
+```bash
+python3 -m scripts.installer.bootstrap --purge-allowlist --target all-agents
+```
+Re-wires current (allowlist-free) hooks after stripping any leftover managed entries.
+
 ## [Unreleased]
 
 _(nothing yet)_

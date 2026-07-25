@@ -45,17 +45,16 @@ class TestPolicyEngine(unittest.TestCase):
 
         self.assertFalse(decision.is_denied())
 
-    def test_denies_markdown_outside_allowlist(self):
+    def test_allows_markdown_outside_former_allowlist(self):
         event = CanonicalToolEvent(
             client="codex",
             tool_name="view_file",
             file_path="/tmp/project/docs/notes.md",
-            markdown_allowed=False,
         )
 
         decision = evaluate(event)
 
-        self.assertTrue(decision.is_denied())
+        self.assertFalse(decision.is_denied())
 
     def test_denies_write_without_active_session(self):
         event = CanonicalToolEvent(

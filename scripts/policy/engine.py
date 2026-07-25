@@ -15,12 +15,6 @@ def evaluate(event: CanonicalToolEvent) -> PolicyDecision:
             "Destructive deletions are forbidden on the AI Codex vault. Use 'mv' to change status."
         )
 
-    if _is_markdown_denied(event):
-        filename = (event.file_path or "").rsplit("/", 1)[-1]
-        return PolicyDecision.deny(
-            f"Read/write of {filename} blocked. Markdown files not in CLAUDE.md allowlist are forbidden."
-        )
-
     ticket_decision = _evaluate_ticket_paths(event)
     if ticket_decision.is_denied():
         return ticket_decision
@@ -155,10 +149,6 @@ def _is_vault_destructive_deletion(event: CanonicalToolEvent) -> bool:
     except (OSError, ValueError):
         return False
     return abs_path == abs_vault or abs_path.startswith(abs_vault + os.sep)
-
-
-def _is_markdown_denied(event: CanonicalToolEvent) -> bool:
-    return bool(event.file_path and event.file_path.endswith(".md") and not event.markdown_allowed)
 
 
 def _requires_session(event: CanonicalToolEvent) -> bool:
