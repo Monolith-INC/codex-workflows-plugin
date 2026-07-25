@@ -71,17 +71,6 @@ def get_today_date_str() -> str:
     return datetime.now().strftime("%Y-%m-%d")
 
 
-def is_allowed_markdown(path: str, vault_dir: str, project_root: str) -> bool:
-    normalized_path = os.path.abspath(path)
-    basename = os.path.basename(normalized_path)
-    if basename in ["CLAUDE.md", "GEMINI.md"]:
-        return True
-    if normalized_path.startswith(os.path.abspath(vault_dir)):
-        return True
-    agent_dir = os.path.join(project_root, ".agent")
-    return normalized_path.startswith(os.path.abspath(agent_dir))
-
-
 def has_active_session_today(vault_dir: str) -> bool:
     sessions_dir = os.path.join(vault_dir, "Agent_Sessions")
     if not os.path.exists(sessions_dir):
@@ -264,7 +253,6 @@ def run(client: str, input_data: dict[str, Any]) -> int:
                 if os.path.isabs(target)
                 else os.path.abspath(os.path.join(project_root, target))
             )
-            target_markdown_allowed = is_allowed_markdown(abs_target, vault_dir, project_root)
             write_decision = evaluate(
                 CanonicalToolEvent(
                     client=client,
@@ -272,7 +260,6 @@ def run(client: str, input_data: dict[str, Any]) -> int:
                     file_path=abs_target,
                     workspace_root=project_root,
                     vault_dir=vault_dir,
-                    markdown_allowed=target_markdown_allowed,
                     session_active=has_active_session_today(vault_dir),
                     is_bugfix_ticket=infer_is_bugfix_ticket(abs_target),
                 )
@@ -282,7 +269,6 @@ def run(client: str, input_data: dict[str, Any]) -> int:
                 emit_decision(client, PolicyDecision.deny(write_decision.reason or "Denied"))
                 return 0
 
-    markdown_allowed = is_allowed_markdown(file_path, vault_dir, project_root)
     file_decision = evaluate(
         CanonicalToolEvent(
             client=client,
@@ -290,7 +276,6 @@ def run(client: str, input_data: dict[str, Any]) -> int:
             file_path=file_path,
             workspace_root=project_root,
             vault_dir=vault_dir,
-            markdown_allowed=markdown_allowed,
             session_active=has_active_session_today(vault_dir),
             is_bugfix_ticket=infer_is_bugfix_ticket(file_path, arguments.get("CodeContent")),
         )
@@ -309,7 +294,6 @@ def run(client: str, input_data: dict[str, Any]) -> int:
                 file_path=file_path,
                 workspace_root=project_root,
                 vault_dir=vault_dir,
-                markdown_allowed=markdown_allowed,
                 session_active=has_active_session_today(vault_dir),
                 is_bugfix_ticket=infer_is_bugfix_ticket(file_path, arguments.get("CodeContent")),
             )

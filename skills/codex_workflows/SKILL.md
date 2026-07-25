@@ -37,7 +37,7 @@ The migration is splitting the omnibus workflow into smaller skills:
 ## Hooks Installed
 
 The skill contains pre-tool git/session execution hooks:
-- **`codex_enforce_hook.py`**: Intercepts tool calls to prevent destructive deletions in the vault, enforce markdown read/write allowlists, and enforce session bootstrapping prior to code modification.
+- **`codex_enforce_hook.py`**: Intercepts tool calls to prevent destructive deletions in the vault and enforce session bootstrapping prior to code modification.
 - **`gemini_enforce_hook.py`**: Gemini CLI host wrapper that reuses the shared policy core with Gemini hook I/O.
 - **`antigravity_enforce_hook.py`**: Antigravity host wrapper that reuses the shared policy core with Antigravity hook I/O.
 - **`claude_enforce_hook.py`**: Claude Code host wrapper that reuses the shared policy core with Claude hook I/O.

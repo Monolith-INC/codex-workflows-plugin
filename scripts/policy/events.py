@@ -30,6 +30,5 @@ class CanonicalToolEvent:
     destination_path: str | None = None
     workspace_root: str = ""
     vault_dir: str = ""
-    markdown_allowed: bool = True
     session_active: bool = True
     is_bugfix_ticket: bool = False

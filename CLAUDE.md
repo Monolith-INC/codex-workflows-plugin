@@ -21,6 +21,9 @@ python3 -m scripts.installer.cli --target claude
 # Install plugin assets into a destination project
 python3 -m scripts.installer.cli --target all-agents --dest /path/to/project
 
+# Purge legacy markdown-allowlist hooks/configs, then re-wire
+python3 -m scripts.installer.bootstrap --purge-allowlist --target all-agents
+
 # Build a release archive
 python3 -m scripts.release_packager --output-dir dist
 
@@ -49,7 +52,6 @@ Every agent tool call is intercepted by `skills/codex_workflows/scripts/codex_en
 
 **Policy engine** (`scripts/policy/engine.py`) — pure function `evaluate(event) -> PolicyDecision`. Contains all enforcement rules:
 - Destructive `rm` commands against the AI Codex vault are denied
-- `.md` file reads/writes are blocked unless the path is in the allowlist (CLAUDE.md, GEMINI.md, `.agent/**`, vault dir)
 - Code writes require an active Agent Session log in `AI_Codex/Agent_Sessions/` for today
 - Ticket moves follow strict lifecycle: `Ready → Active → Closed` (tasks) or `Ready → Active → Resolved` (bugfixes, detected by `bug` in filename)
 - Starting a ticket enforces: no other ticket already active, branch is not the integration base, branch is synced with `origin/<base>`, no unmerged commits from another feature branch
@@ -72,6 +74,6 @@ Every agent tool call is intercepted by `skills/codex_workflows/scripts/codex_en
 - `test/installer/` — smoke and target-path tests for the installer
 - `test_plugin.py` — legacy end-to-end suite that invokes the hook script via subprocess with mock payloads
 
-### Markdown allowlist
+### Markdown access
 
-The hook blocks all `.md` file access by default. Allowed paths are: `CLAUDE.md`, `GEMINI.md`, anything under `.agent/`, and anything under the `AI_Codex*` vault directory. This is enforced both in `hook_runtime.py::is_allowed_markdown()` and in `policy/engine.py::_is_markdown_denied()`.
+Markdown allowlisting was removed in 0.5.6. `.md` reads are unrestricted by this plugin; writes still require an active Agent Session when they go through write tools. Bootstrap `--purge-allowlist` strips leftover managed hooks and deletes legacy `codex-workflow.config.json` allowlist companions.

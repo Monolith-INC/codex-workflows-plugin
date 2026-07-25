@@ -14,7 +14,7 @@ The shared runtime owns:
 
 - canonical event evaluation
 - destructive command gating
-- markdown allowlist checks
+- markdown allowlist checks (removed in 0.5.6; historical)
 - session bootstrap checks
 - ticket lifecycle and YouTrack gating
 

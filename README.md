@@ -2,7 +2,7 @@
 
 A portable, multi-host workspace automation plugin that enforces session bootstrapping, ticket lifecycle governance, YouTrack state gating, and git safety checks across agent-driven development workflows.
 
-> **v0.5.5** — Fixes Claude Code hook client detection (`hooks/hooks.json` now routes through `claude_enforce_hook.py`), adds authenticated `gh release download` fallback for private repo installs, and ships a per-repo `codex-workflow.config.json` so the markdown allowlist covers this plugin's own docs. **161 tests**, all passing.
+> **v0.5.6** — Removes the markdown allowlist from the enforce hook (reads no longer blocked outside CLAUDE.md/vault), adds `--purge-allowlist` scan/strip automation, and keeps vault/session/ticket guards. **179 tests**, all passing.
 
 ## Purpose
 
@@ -234,7 +234,7 @@ Pass `--dest /path/to/project` to also remove generated project hook configs and
 python3 -m unittest discover -s test -p "test_*.py" -v
 ```
 
-**160 tests**, all passing. Coverage spans: policy engine (including git safety checks), all 5 host adapters, ticket runtime, spec/resolution reflection, installer (one-step shell install, dry-run, live `--dest` write, and uninstall cleanup), orchestrator (state machine, MCP server, evaluator, hooks), profiles, and release packager.
+**179 tests**, all passing. Coverage spans: policy engine (including git safety checks), all 5 host adapters, ticket runtime, spec/resolution reflection, installer (one-step shell install, dry-run, live `--dest` write, and uninstall cleanup), orchestrator (state machine, MCP server, evaluator, hooks), profiles, and release packager.
 
 CI also runs `python3 scripts/validate_plugin.py .` to verify the plugin manifest and skills layout.
 
