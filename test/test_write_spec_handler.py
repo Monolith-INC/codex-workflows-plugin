@@ -34,6 +34,21 @@ class TestWriteSpecHandler(unittest.TestCase):
 
 
 class TestStartTicketSpecHook(unittest.TestCase):
+    def test_start_ticket_denies_when_another_active_exists(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault = "AI_Codex"
+            active_dir = Path(tmp) / vault / "Tickets" / "Active"
+            active_dir.mkdir(parents=True)
+            (active_dir / "task-999.md").write_text("existing active ticket\n", encoding="utf-8")
+            with mock.patch.dict(os.environ, {"CODEX_PROJECT_ROOT": tmp, "CODEX_VAULT_FOLDER": vault}):
+                with self.assertRaises(ValueError) as ctx:
+                    handle_start_ticket(
+                        {"ticket_id": "task-123"},
+                        {"name": "start-ticket"},
+                        "# start-ticket\n",
+                    )
+                self.assertIn("already an active ticket", str(ctx.exception))
+
     def test_start_ticket_triggers_spec_directive_when_missing(self):
         with tempfile.TemporaryDirectory() as tmp:
             with mock.patch.dict(os.environ, {"CODEX_PROJECT_ROOT": tmp}):

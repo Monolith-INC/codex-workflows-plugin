@@ -12,7 +12,7 @@ def desired_cursor_hooks(hook_command: str) -> dict[str, Any]:
             "preToolUse": [
                 {
                     "command": hook_command,
-                    "matcher": "Shell|Read|Grep|Delete|Task",
+                    "matcher": "Shell|Read|Write|Grep|Delete|Task",
                     "timeout": 5,
                     "failClosed": True,
                 }

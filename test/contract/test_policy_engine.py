@@ -18,6 +18,33 @@ class TestPolicyEngine(unittest.TestCase):
 
         self.assertTrue(decision.is_denied())
 
+    def test_denies_delete_tool_inside_vault(self):
+        event = CanonicalToolEvent(
+            client="cursor",
+            tool_name="Delete",
+            file_path="/tmp/project/AI_Codex/Tickets/Active/task-123.md",
+            workspace_root="/tmp/project",
+            vault_dir="/tmp/project/AI_Codex",
+        )
+
+        decision = evaluate(event)
+
+        self.assertTrue(decision.is_denied())
+        self.assertIn("Destructive deletions", decision.reason or "")
+
+    def test_allows_delete_tool_outside_vault(self):
+        event = CanonicalToolEvent(
+            client="cursor",
+            tool_name="Delete",
+            file_path="/tmp/project/lib/utils.dart",
+            workspace_root="/tmp/project",
+            vault_dir="/tmp/project/AI_Codex",
+        )
+
+        decision = evaluate(event)
+
+        self.assertFalse(decision.is_denied())
+
     def test_denies_markdown_outside_allowlist(self):
         event = CanonicalToolEvent(
             client="codex",

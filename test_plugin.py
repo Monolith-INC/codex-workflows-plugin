@@ -112,6 +112,55 @@ class TestCodexEnforceHook(unittest.TestCase):
         res = self.run_hook(stdin)
         self.assertEqual(res["permissionDecision"], "allow")
 
+    def test_deny_shell_redirect_without_session(self):
+        code_file = os.path.join(self.test_dir, "lib", "utils.dart")
+        stdin = {
+            "name": "run_command",
+            "arguments": {
+                "CommandLine": f"echo 'code' > {code_file}"
+            }
+        }
+        res = self.run_hook(stdin)
+        self.assertEqual(res["permissionDecision"], "deny")
+        self.assertIn("Write blocked. You must initialize today's Agent Session", res["reason"])
+
+    def test_deny_shell_redirect_to_forbidden_markdown(self):
+        sessions_dir = os.path.join(self.vault_dir, "Agent_Sessions")
+        os.makedirs(sessions_dir)
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        session_file = os.path.join(sessions_dir, f"{today_str}-120000-session.md")
+        with open(session_file, "w") as f:
+            f.write("---\nnext: null\n---")
+
+        unallowed_path = os.path.join(self.test_dir, "docs", "notes.md")
+        stdin = {
+            "name": "run_command",
+            "arguments": {
+                "CommandLine": f"echo secret > {unallowed_path}"
+            }
+        }
+        res = self.run_hook(stdin)
+        self.assertEqual(res["permissionDecision"], "deny")
+        self.assertIn("blocked", res["reason"])
+
+    def test_allow_shell_redirect_with_session(self):
+        sessions_dir = os.path.join(self.vault_dir, "Agent_Sessions")
+        os.makedirs(sessions_dir)
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        session_file = os.path.join(sessions_dir, f"{today_str}-120000-session.md")
+        with open(session_file, "w") as f:
+            f.write("---\nnext: null\n---")
+
+        code_file = os.path.join(self.test_dir, "lib", "utils.dart")
+        stdin = {
+            "name": "run_command",
+            "arguments": {
+                "CommandLine": f"echo 'code' > {code_file}"
+            }
+        }
+        res = self.run_hook(stdin)
+        self.assertEqual(res["permissionDecision"], "allow")
+
     def test_allow_ticket_move_ready_to_active(self):
         stdin = {
             "name": "run_command",

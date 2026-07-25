@@ -1,5 +1,5 @@
 import unittest
-from scripts.orchestrator.evaluator import evaluate_output
+from scripts.orchestrator.evaluator import collect_critiques, evaluate_output, skill_validation_critiques
 
 class TestEvaluator(unittest.TestCase):
     def setUp(self):
@@ -77,6 +77,36 @@ class TestEvaluator(unittest.TestCase):
         critiques = evaluate_output(invalid_output, self.manifest)
         self.assertEqual(len(critiques), 1)
         self.assertIn("Expected output to be a dictionary/object", critiques[0])
+
+    def test_skill_validation_critiques_from_actor_critic(self):
+        output = {
+            "ticket_id": "T-1",
+            "spec_kind": "tech-spec",
+            "specs_dir": "AI_Codex/Specs/t-1",
+            "mode": "instructions",
+            "critiques": "Draft contains placeholder tokens",
+        }
+        manifest = {
+            "name": "write-spec",
+            "output_signature": {
+                "type": "object",
+                "required": ["ticket_id", "spec_kind", "specs_dir", "mode"],
+                "properties": {
+                    "ticket_id": {"type": "string"},
+                    "spec_kind": {"type": "string"},
+                    "specs_dir": {"type": "string"},
+                    "mode": {"type": "string"},
+                    "critiques": {"type": "string"},
+                },
+            },
+        }
+        self.assertEqual(evaluate_output(output, manifest), [])
+        self.assertEqual(skill_validation_critiques(output), ["Draft contains placeholder tokens"])
+        self.assertEqual(collect_critiques(output, manifest), ["Draft contains placeholder tokens"])
+
+    def test_skill_validation_skips_completed_mode(self):
+        output = {"mode": "completed", "critiques": "stale"}
+        self.assertEqual(skill_validation_critiques(output), [])
 
 if __name__ == '__main__':
     unittest.main()

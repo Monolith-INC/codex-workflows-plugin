@@ -1,6 +1,33 @@
 from typing import Any
 
 
+def skill_validation_critiques(output: dict[str, Any]) -> list[str]:
+    """Critiques from Actor-Critic skill handlers, separate from schema validation."""
+    mode = output.get("mode", "")
+    if mode == "completed":
+        return []
+
+    raw = output.get("critiques")
+    parts: list[str] = []
+    if isinstance(raw, str) and raw.strip():
+        parts = [segment.strip() for segment in raw.split(";") if segment.strip()]
+    elif isinstance(raw, list):
+        parts = [str(item) for item in raw if item]
+
+    if mode == "blocked_requires_review" and not parts:
+        return ["skill blocked — requires review"]
+    return parts
+
+
+def collect_critiques(output: Any, manifest: dict[str, Any]) -> list[str]:
+    schema_critiques = evaluate_output(output, manifest)
+    if schema_critiques:
+        return schema_critiques
+    if isinstance(output, dict):
+        return skill_validation_critiques(output)
+    return []
+
+
 def evaluate_output(output: Any, manifest: dict[str, Any]) -> list[str]:
     """Validate task output against the skill manifest output_signature."""
     critiques: list[str] = []
