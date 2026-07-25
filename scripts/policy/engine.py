@@ -1,11 +1,18 @@
 import os
 from .events import CanonicalToolEvent, PolicyDecision
 
+_VAULT_DELETE_TOOLS = frozenset({"Delete", "delete_file", "remove_file"})
+
 
 def evaluate(event: CanonicalToolEvent) -> PolicyDecision:
     if _is_destructive_command(event):
         return PolicyDecision.deny(
             "Destructive deletions (rm) are forbidden on the AI Codex vault. Use 'mv' to change status."
+        )
+
+    if _is_vault_destructive_deletion(event):
+        return PolicyDecision.deny(
+            "Destructive deletions are forbidden on the AI Codex vault. Use 'mv' to change status."
         )
 
     if _is_markdown_denied(event):
@@ -132,6 +139,22 @@ def _is_destructive_command(event: CanonicalToolEvent) -> bool:
     if any(marker and marker in command for marker in vault_markers):
         return "rm " in command or "rmdir " in command
     return False
+
+
+def _is_vault_destructive_deletion(event: CanonicalToolEvent) -> bool:
+    """Block native delete tools on vault paths (rm is already blocked for Shell)."""
+    if event.tool_name not in _VAULT_DELETE_TOOLS:
+        return False
+    file_path = (event.file_path or "").strip()
+    vault_dir = (event.vault_dir or "").strip()
+    if not file_path or not vault_dir:
+        return False
+    try:
+        abs_path = os.path.abspath(file_path)
+        abs_vault = os.path.abspath(vault_dir)
+    except (OSError, ValueError):
+        return False
+    return abs_path == abs_vault or abs_path.startswith(abs_vault + os.sep)
 
 
 def _is_markdown_denied(event: CanonicalToolEvent) -> bool:

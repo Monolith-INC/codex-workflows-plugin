@@ -258,7 +258,7 @@ def run(client: str, input_data: dict[str, Any]) -> int:
                         return 0
 
     markdown_allowed = is_allowed_markdown(file_path, vault_dir, project_root)
-    markdown_decision = evaluate(
+    file_decision = evaluate(
         CanonicalToolEvent(
             client=client,
             tool_name=tool_name,
@@ -270,9 +270,9 @@ def run(client: str, input_data: dict[str, Any]) -> int:
             is_bugfix_ticket=infer_is_bugfix_ticket(file_path, arguments.get("CodeContent")),
         )
     )
-    if markdown_decision.is_denied() and isinstance(file_path, str) and file_path.endswith(".md") and not markdown_allowed:
-        log_debug(f"DENIED: {markdown_decision.reason}")
-        emit_decision(client, PolicyDecision.deny(markdown_decision.reason or "Denied"))
+    if file_decision.is_denied():
+        log_debug(f"DENIED: {file_decision.reason}")
+        emit_decision(client, PolicyDecision.deny(file_decision.reason or "Denied"))
         return 0
  
     write_tools = ["write_to_file", "replace_file_content", "multi_replace_file_content", "Write", "StrReplace", "Edit"]
