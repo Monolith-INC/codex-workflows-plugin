@@ -7,6 +7,10 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [Unreleased]
+
+_(nothing yet)_
+
 ## [0.5.7] - 2026-07-25
 
 ### Added
@@ -19,6 +23,16 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **BREAKING: global install removed.** Bootstrap/`install.sh` require `--dest`; runtime defaults to `<dest>/.codex-workflows`; home hook wiring and home plugin registration are gone. Skills/commands sync into project `.claude/` and `.agents/skills/`.
 - Session denial messages now explain stale/mismatched open sessions instead of only requiring a same-day file.
 - Plugin metadata bumped to `0.5.7` across Codex and Claude plugin manifests.
+
+### Migration
+```bash
+# Project-only install (global install removed):
+python3 -m scripts.installer.bootstrap --target all-agents --dest /path/to/project
+# or
+curl -fsSL https://github.com/theocarranza/codex-workflows-plugin/releases/latest/download/install.sh \
+  | bash -s -- --dest /path/to/project
+```
+Hooks and skills now live under the project (`.claude/`, `.agents/skills/`, `.agent/`). Runtime is `<dest>/.codex-workflows/`.
 
 ## [0.5.6] — 2026-07-25
 
@@ -33,15 +47,9 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Migration
 ```bash
-python3 -m scripts.installer.bootstrap --purge-allowlist --target all-agents
+python3 -m scripts.installer.bootstrap --purge-allowlist --target all-agents --dest /path/to/project
 ```
-Re-wires current (allowlist-free) hooks after stripping any leftover managed entries.
-
-## [Unreleased]
-
-_(nothing yet)_
-
----
+Re-wires current (allowlist-free) hooks after stripping any leftover managed entries. Requires `--dest` (project-only install).
 
 ## [0.5.5] — 2026-07-09
 
