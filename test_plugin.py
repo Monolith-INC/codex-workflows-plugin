@@ -96,8 +96,9 @@ class TestCodexEnforceHook(unittest.TestCase):
         # Create an active session file for today
         sessions_dir = os.path.join(self.vault_dir, "Agent_Sessions")
         os.makedirs(sessions_dir)
-        today_str = datetime.now().strftime("%Y-%m-%d")
-        session_file = os.path.join(sessions_dir, f"{today_str}-120000-session.md")
+        session_file = os.path.join(
+            sessions_dir, datetime.now().strftime("%Y-%m-%d-%H%M%S-session.md")
+        )
         with open(session_file, "w") as f:
             f.write("---\nnext: null\n---")
             
@@ -126,8 +127,9 @@ class TestCodexEnforceHook(unittest.TestCase):
     def test_allow_shell_redirect_to_markdown_with_session(self):
         sessions_dir = os.path.join(self.vault_dir, "Agent_Sessions")
         os.makedirs(sessions_dir)
-        today_str = datetime.now().strftime("%Y-%m-%d")
-        session_file = os.path.join(sessions_dir, f"{today_str}-120000-session.md")
+        session_file = os.path.join(
+            sessions_dir, datetime.now().strftime("%Y-%m-%d-%H%M%S-session.md")
+        )
         with open(session_file, "w") as f:
             f.write("---\nnext: null\n---")
 
@@ -144,8 +146,9 @@ class TestCodexEnforceHook(unittest.TestCase):
     def test_allow_shell_redirect_with_session(self):
         sessions_dir = os.path.join(self.vault_dir, "Agent_Sessions")
         os.makedirs(sessions_dir)
-        today_str = datetime.now().strftime("%Y-%m-%d")
-        session_file = os.path.join(sessions_dir, f"{today_str}-120000-session.md")
+        session_file = os.path.join(
+            sessions_dir, datetime.now().strftime("%Y-%m-%d-%H%M%S-session.md")
+        )
         with open(session_file, "w") as f:
             f.write("---\nnext: null\n---")
 
@@ -306,8 +309,9 @@ class TestCodexEnforceHook(unittest.TestCase):
         # Create an active session file for today to pass session check
         sessions_dir = os.path.join(self.vault_dir, "Agent_Sessions")
         os.makedirs(sessions_dir, exist_ok=True)
-        today_str = datetime.now().strftime("%Y-%m-%d")
-        session_file = os.path.join(sessions_dir, f"{today_str}-120000-session.md")
+        session_file = os.path.join(
+            sessions_dir, datetime.now().strftime("%Y-%m-%d-%H%M%S-session.md")
+        )
         with open(session_file, "w") as f:
             f.write("---\nnext: null\n---")
 
@@ -341,8 +345,9 @@ class TestCodexEnforceHook(unittest.TestCase):
     def test_allow_write_closed_with_youtrack_done(self):
         sessions_dir = os.path.join(self.vault_dir, "Agent_Sessions")
         os.makedirs(sessions_dir, exist_ok=True)
-        today_str = datetime.now().strftime("%Y-%m-%d")
-        session_file = os.path.join(sessions_dir, f"{today_str}-120000-session.md")
+        session_file = os.path.join(
+            sessions_dir, datetime.now().strftime("%Y-%m-%d-%H%M%S-session.md")
+        )
         with open(session_file, "w") as f:
             f.write("---\nnext: null\n---")
 
