@@ -113,6 +113,52 @@ class TestBootstrapUninstall(unittest.TestCase):
             self.assertEqual(uninstall.returncode, 0, uninstall.stdout + uninstall.stderr)
             self.assertTrue(install_dir.is_dir())
 
+    def test_uninstall_removes_only_plugin_codex_mcp_entry(self):
+        with tempfile.TemporaryDirectory() as temp_home, tempfile.TemporaryDirectory() as temp_project:
+            home = Path(temp_home)
+            project = Path(temp_project)
+            install_dir = project / ".codex-workflows"
+            (project / ".mcp.json").write_text(
+                json.dumps(
+                    {
+                        "mcpServers": {
+                            "azure-devops": {
+                                "command": "npx",
+                                "args": ["-y", "@azure-devops/mcp", "bhave-tecnologia-comportamental"],
+                            }
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            install = _run_bootstrap(
+                home,
+                "--install-dir",
+                str(install_dir),
+                "--target",
+                "claude",
+                "--dest",
+                str(project),
+            )
+            self.assertEqual(install.returncode, 0, install.stdout + install.stderr)
+
+            uninstall = _run_bootstrap(
+                home,
+                "--install-dir",
+                str(install_dir),
+                "--uninstall",
+                "--dest",
+                str(project),
+            )
+            self.assertEqual(uninstall.returncode, 0, uninstall.stdout + uninstall.stderr)
+
+            mcp_servers = json.loads((project / ".mcp.json").read_text(encoding="utf-8"))["mcpServers"]
+            self.assertEqual(set(mcp_servers), {"azure-devops"})
+            config = (project / ".codex" / "config.toml").read_text(encoding="utf-8")
+            self.assertIn("[mcp_servers.azure-devops]", config)
+            self.assertNotIn("agentic-orchestrator", config)
+
     def test_dry_run_does_not_change_filesystem(self):
         with tempfile.TemporaryDirectory() as temp_home, tempfile.TemporaryDirectory() as temp_project:
             home = Path(temp_home)

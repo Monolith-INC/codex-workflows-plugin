@@ -184,6 +184,69 @@ class TestInstallCLI(unittest.TestCase):
             self.assertTrue((project / ".claude" / "settings.json").exists())
             self.assertTrue((project / ".cursor" / "hooks.json").exists())
 
+    def test_project_install_writes_codex_mcp_config_from_project_mcp_json(self):
+        import os
+        import subprocess
+
+        with tempfile.TemporaryDirectory() as temp_home, tempfile.TemporaryDirectory() as dest:
+            home = Path(temp_home)
+            project = Path(dest)
+            mcp_path = project / ".mcp.json"
+            (project / ".codex").mkdir()
+            (project / ".codex" / "config.toml").write_text(
+                "\n".join(
+                    [
+                        "[mcp_servers.azure-devops]",
+                        'command = "old-npx"',
+                        "",
+                        "[mcp_servers.azure-devops.tools.core_list_projects]",
+                        'approval_mode = "approve"',
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            mcp_path.write_text(
+                json.dumps(
+                    {
+                        "mcpServers": {
+                            "azure-devops": {
+                                "command": "npx",
+                                "args": ["-y", "@azure-devops/mcp", "bhave-tecnologia-comportamental"],
+                            },
+                            "agile-workflow-orchestrator": {
+                                "command": "/usr/bin/python3",
+                                "args": ["-m", "orchestrator_core", "mcp"],
+                                "env": {
+                                    "PYTHONPATH": "/opt/agile-workflow",
+                                    "CODEX_PROJECT_ROOT": str(project),
+                                },
+                            },
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = subprocess.run(
+                [sys.executable, "-m", "scripts.installer.bootstrap", "--dest", str(project), "--target", "claude"],
+                capture_output=True,
+                text=True,
+                env={**os.environ, "HOME": str(home)},
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+            config = (project / ".codex" / "config.toml").read_text(encoding="utf-8")
+            self.assertIn("[mcp_servers.azure-devops]", config)
+            self.assertIn('args = ["-y", "@azure-devops/mcp", "bhave-tecnologia-comportamental"]', config)
+            self.assertIn("[mcp_servers.azure-devops.tools.core_list_projects]", config)
+            self.assertIn('approval_mode = "approve"', config)
+            self.assertNotIn('command = "old-npx"', config)
+            self.assertIn("[mcp_servers.agile-workflow-orchestrator.env]", config)
+            self.assertIn(f'CODEX_PROJECT_ROOT = "{project}"', config)
+            self.assertIn("[mcp_servers.agentic-orchestrator.env]", config)
+            self.assertIn(f'ORCHESTRATOR_SKILLS_DIR = "{project / ".codex-workflows" / "skills"}"', config)
+
 
 class TestStandaloneBootstrapZipInstall(unittest.TestCase):
     """Mirror install.sh: extract bootstrap.py and run it outside the package tree."""

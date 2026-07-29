@@ -24,6 +24,7 @@ class UninstallPlan:
     remove_paths: list[Path] = field(default_factory=list)
     prune_stops: dict[Path, Path] = field(default_factory=dict)
     write_json: dict[Path, dict[str, Any]] = field(default_factory=dict)
+    write_text: dict[Path, str] = field(default_factory=dict)
     messages: list[str] = field(default_factory=list)
 
 
@@ -45,6 +46,7 @@ def uninstall(
     _plan_project_asset_cleanup(plan, project_root, install_dir)
     _plan_project_discovery_cleanup(plan, project_root, install_dir)
     _plan_mcp_cleanup(plan, project_root)
+    _plan_codex_mcp_cleanup(plan, project_root)
 
     if not keep_runtime:
         _plan_remove_path(plan, install_dir, prune_stop=install_dir.parent)
@@ -221,6 +223,52 @@ def _plan_mcp_cleanup(plan: UninstallPlan, project_root: Path) -> None:
         plan.messages.append(f"Write cleaned MCP config: {mcp_path}")
 
 
+def _plan_codex_mcp_cleanup(plan: UninstallPlan, project_root: Path) -> None:
+    config_path = project_root / ".codex" / "config.toml"
+    if not config_path.exists():
+        return
+    cleaned = _strip_codex_mcp_server_sections(config_path.read_text(encoding="utf-8"), {"agentic-orchestrator"})
+    if cleaned:
+        plan.write_text[config_path] = cleaned.rstrip() + "\n"
+        plan.messages.append(f"Write cleaned Codex MCP config: {config_path}")
+    else:
+        _plan_remove_path(plan, config_path, prune_stop=project_root)
+
+
+def _strip_codex_mcp_server_sections(content: str, server_names: set[str]) -> str:
+    kept: list[str] = []
+    skip = False
+    for line in content.splitlines():
+        header = _toml_header(line)
+        if header is not None:
+            skip = _replace_mcp_server_section(header, server_names)
+        if not skip:
+            kept.append(line)
+    return "\n".join(kept).strip()
+
+
+def _toml_header(line: str) -> str | None:
+    stripped = line.strip()
+    if stripped.startswith("[[") or not stripped.startswith("[") or not stripped.endswith("]"):
+        return None
+    return stripped[1:-1].strip()
+
+
+def _mcp_server_name_from_header(header: str) -> str | None:
+    prefix = "mcp_servers."
+    if not header.startswith(prefix):
+        return None
+    return header.removeprefix(prefix).split(".", 1)[0].strip('"')
+
+
+def _replace_mcp_server_section(header: str, server_names: set[str]) -> bool:
+    server_name = _mcp_server_name_from_header(header)
+    if server_name not in server_names:
+        return False
+    rest = header.removeprefix("mcp_servers.").split(".", 1)
+    return len(rest) == 1 or rest[1].strip('"') == "env"
+
+
 def _plan_remove_path(plan: UninstallPlan, path: Path, *, prune_stop: Path) -> None:
     if path in plan.remove_paths:
         return
@@ -234,6 +282,10 @@ def _apply_plan(plan: UninstallPlan) -> None:
     for path, content in plan.write_json.items():
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(content, indent=2), encoding="utf-8")
+
+    for path, content in plan.write_text.items():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
 
     for path in sorted(plan.remove_paths, key=lambda item: len(item.parts), reverse=True):
         if path.is_symlink() or path.is_file():

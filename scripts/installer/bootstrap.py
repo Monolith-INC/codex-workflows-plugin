@@ -3,7 +3,7 @@
 Usage
 -----
 From the release zip:
-    python3 bootstrap.py codex-workflows-plugin-0.5.9.zip --target all-agents --dest /path/to/project
+    python3 bootstrap.py codex-workflows-plugin-0.5.10.zip --target all-agents --dest /path/to/project
 
 From source after cloning:
     python3 -m scripts.installer.bootstrap --target all-agents --dest /path/to/project
@@ -88,7 +88,7 @@ def strip_managed_hooks(config: dict, script_names: set[str]) -> dict:
 
 
 def wire_orchestrator_mcp(install_dir: Path, project_dest: Path) -> bool:
-    """Merge the agentic-orchestrator MCP server into a project's .mcp.json."""
+    """Merge MCP servers into Claude-compatible JSON and Codex TOML config."""
     mcp_path = project_dest / ".mcp.json"
     existing: dict = {"mcpServers": {}}
     if mcp_path.exists():
@@ -109,9 +109,89 @@ def wire_orchestrator_mcp(install_dir: Path, project_dest: Path) -> bool:
     }
     try:
         mcp_path.write_text(json.dumps(existing, indent=2) + "\n", encoding="utf-8")
+        _write_codex_mcp_config(project_dest, servers)
     except OSError:
         return False
     return True
+
+
+def _write_codex_mcp_config(project_dest: Path, servers: dict) -> None:
+    config_path = project_dest / ".codex" / "config.toml"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    existing = config_path.read_text(encoding="utf-8") if config_path.exists() else ""
+    server_names = {name for name, value in servers.items() if isinstance(value, dict)}
+    base = _strip_codex_mcp_server_sections(existing, server_names).rstrip()
+    rendered = "\n\n".join(
+        _render_codex_mcp_server(name, config)
+        for name, config in sorted(servers.items())
+        if isinstance(config, dict)
+    )
+    content = "\n\n".join(part for part in (base, rendered) if part).rstrip() + "\n"
+    config_path.write_text(content, encoding="utf-8")
+
+
+def _strip_codex_mcp_server_sections(content: str, server_names: set[str]) -> str:
+    kept: list[str] = []
+    skip = False
+    for line in content.splitlines():
+        header = _toml_header(line)
+        if header is not None:
+            skip = _replace_mcp_server_section(header, server_names)
+        if not skip:
+            kept.append(line)
+    return "\n".join(kept).strip()
+
+
+def _toml_header(line: str) -> str | None:
+    stripped = line.strip()
+    if stripped.startswith("[[") or not stripped.startswith("[") or not stripped.endswith("]"):
+        return None
+    return stripped[1:-1].strip()
+
+
+def _mcp_server_name_from_header(header: str) -> str | None:
+    prefix = "mcp_servers."
+    if not header.startswith(prefix):
+        return None
+    return header.removeprefix(prefix).split(".", 1)[0].strip('"')
+
+
+def _replace_mcp_server_section(header: str, server_names: set[str]) -> bool:
+    server_name = _mcp_server_name_from_header(header)
+    if server_name not in server_names:
+        return False
+    rest = header.removeprefix("mcp_servers.").split(".", 1)
+    return len(rest) == 1 or rest[1].strip('"') == "env"
+
+
+def _render_codex_mcp_server(name: str, config: dict) -> str:
+    lines = [f'[mcp_servers.{_toml_key(name)}]']
+    for key in ("command", "url", "args", "env_vars", "cwd", "enabled", "required", "startup_timeout_sec", "tool_timeout_sec"):
+        if key in config:
+            lines.append(f"{key} = {_toml_value(config[key])}")
+    env = config.get("env")
+    if isinstance(env, dict) and env:
+        lines.append("")
+        lines.append(f'[mcp_servers.{_toml_key(name)}.env]')
+        for key, value in sorted(env.items()):
+            lines.append(f"{_toml_key(key)} = {_toml_value(value)}")
+    return "\n".join(lines)
+
+
+def _toml_key(value: str) -> str:
+    if value.replace("_", "").replace("-", "").isalnum():
+        return value
+    return json.dumps(value)
+
+
+def _toml_value(value) -> str:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, int | float):
+        return str(value)
+    if isinstance(value, list):
+        return "[" + ", ".join(_toml_value(item) for item in value) + "]"
+    return json.dumps(str(value))
 
 
 def _ensure_install_import_path(install_dir: Path) -> None:
