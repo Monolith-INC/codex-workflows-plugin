@@ -114,11 +114,36 @@ def wire_orchestrator_mcp(install_dir: Path, project_dest: Path) -> bool:
     return True
 
 
+def _ensure_install_import_path(install_dir: Path) -> None:
+    """Prefer the installed tree for ``scripts.*`` imports.
+
+    ``install.sh`` extracts ``bootstrap.py`` to a temp path and runs it as a
+    standalone file, so there is no package context until ``install_dir`` is on
+    ``sys.path``. Clear cached ``scripts`` modules so a prior source checkout
+    import cannot shadow the installed copy.
+    """
+    install_root = str(Path(install_dir).resolve())
+    if install_root not in sys.path:
+        sys.path.insert(0, install_root)
+    for mod_name in list(sys.modules):
+        if mod_name == "scripts" or mod_name.startswith("scripts."):
+            del sys.modules[mod_name]
+
+
 def wire(install_dir: Path, target: str, project_dest: str | Path) -> int:
     """Wire hooks and discovery assets into a project. Global install is not supported."""
+    _ensure_install_import_path(install_dir)
+
     from scripts.installer.purge_markdown_allowlist import (  # noqa: PLC0415
         purge_allowlist_config_files,
     )
+    from scripts.installer.cli import install  # noqa: PLC0415
+    from scripts.installer.cursor_hooks import (  # noqa: PLC0415
+        desired_cursor_hooks,
+        merge_cursor_hooks,
+        strip_managed_cursor_hooks,
+    )
+    from scripts.installer.targets import Target  # noqa: PLC0415
 
     dest_path = Path(project_dest).expanduser().resolve()
     purge_report = purge_allowlist_config_files(
@@ -128,21 +153,6 @@ def wire(install_dir: Path, target: str, project_dest: str | Path) -> int:
     )
     for message in purge_report.messages:
         print(message)
-
-    if str(install_dir) not in sys.path:
-        sys.path.insert(0, str(install_dir))
-
-    for mod_name in list(sys.modules):
-        if mod_name.startswith("scripts.installer") or mod_name == "scripts":
-            del sys.modules[mod_name]
-
-    from scripts.installer.cli import install  # noqa: PLC0415
-    from scripts.installer.cursor_hooks import (  # noqa: PLC0415
-        desired_cursor_hooks,
-        merge_cursor_hooks,
-        strip_managed_cursor_hooks,
-    )
-    from scripts.installer.targets import Target  # noqa: PLC0415
 
     client_names = {
         "claude": "Claude CLI (claude-cli) & IDE plugin",
@@ -331,6 +341,33 @@ def main() -> int:
         else default_install_dir(dest_path).resolve()
     )
 
+    zip_path: Path | None = None
+    if args.zip:
+        zip_path = Path(args.zip).expanduser().resolve()
+        if not zip_path.exists():
+            print(f"error: zip not found: {zip_path}", file=sys.stderr)
+            return 1
+
+    # install.sh runs this file from a temp path with no package context. Install
+    # the zip (when provided) before any ``scripts.*`` imports so uninstall/purge
+    # and wire can resolve the installed tree.
+    script_dir = Path(__file__).parent.parent.parent.resolve()
+    is_running_from_install_dir = script_dir == install_dir
+    installed_runtime = False
+
+    if zip_path is not None and not args.uninstall:
+        print(f"Installing {zip_path} → {install_dir} ...")
+        install_from_zip(zip_path, install_dir)
+        print(f"Installed to {install_dir}")
+        installed_runtime = True
+    elif zip_path is not None and args.uninstall and not (install_dir / "scripts").is_dir():
+        # Need uninstall helpers from the zip when no prior project runtime exists.
+        install_from_zip(zip_path, install_dir)
+        installed_runtime = True
+
+    if (install_dir / "scripts").is_dir():
+        _ensure_install_import_path(install_dir)
+
     if args.uninstall:
         from scripts.installer.uninstall import uninstall  # noqa: PLC0415
 
@@ -358,24 +395,15 @@ def main() -> int:
         if args.scan_only or dry or not args.target:
             return 0
 
-    script_dir = Path(__file__).parent.parent.parent.resolve()
-    is_running_from_install_dir = script_dir == install_dir
-
-    if args.zip:
-        zip_path = Path(args.zip).expanduser().resolve()
-        if not zip_path.exists():
-            print(f"error: zip not found: {zip_path}", file=sys.stderr)
-            return 1
-        print(f"Installing {zip_path} → {install_dir} ...")
-        install_from_zip(zip_path, install_dir)
-        print(f"Installed to {install_dir}")
-    elif args.target and install_dir.exists() and is_running_from_install_dir:
-        pass  # wire-only from already-installed tree
-    else:
-        source_root = Path(__file__).parent.parent.parent
-        print(f"Installing from source → {install_dir} ...")
-        install_from_source(source_root, install_dir)
-        print(f"Installed to {install_dir}")
+    if not installed_runtime:
+        if args.target and install_dir.exists() and is_running_from_install_dir:
+            pass  # wire-only from already-installed tree
+        else:
+            source_root = Path(__file__).parent.parent.parent
+            print(f"Installing from source → {install_dir} ...")
+            install_from_source(source_root, install_dir)
+            print(f"Installed to {install_dir}")
+            _ensure_install_import_path(install_dir)
 
     if args.target:
         print(f"\nWiring {args.target} → {dest_path} ...")

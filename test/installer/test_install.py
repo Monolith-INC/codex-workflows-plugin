@@ -185,5 +185,50 @@ class TestInstallCLI(unittest.TestCase):
             self.assertTrue((project / ".cursor" / "hooks.json").exists())
 
 
+class TestStandaloneBootstrapZipInstall(unittest.TestCase):
+    """Mirror install.sh: extract bootstrap.py and run it outside the package tree."""
+
+    def test_standalone_bootstrap_wires_from_zip(self):
+        import subprocess
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            staging = root / "staging"
+            project = root / "project"
+            project.mkdir()
+            install_from_source(PLUGIN_ROOT, staging)
+
+            zip_path = root / "codex-workflows-plugin-test.zip"
+            with zipfile.ZipFile(zip_path, "w") as archive:
+                for path in staging.rglob("*"):
+                    if path.is_file():
+                        archive.write(path, path.relative_to(staging).as_posix())
+
+            bootstrap_path = root / "bootstrap.py"
+            with zipfile.ZipFile(zip_path) as archive:
+                bootstrap_path.write_bytes(archive.read("scripts/installer/bootstrap.py"))
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(bootstrap_path),
+                    str(zip_path),
+                    "--target",
+                    "claude",
+                    "--dest",
+                    str(project),
+                ],
+                capture_output=True,
+                text=True,
+                cwd=root,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            runtime = default_install_dir(project)
+            self.assertTrue((runtime / "scripts" / "installer" / "bootstrap.py").exists())
+            self.assertTrue((project / ".claude" / "settings.json").exists())
+            self.assertNotIn("ModuleNotFoundError", result.stderr)
+            self.assertNotIn("No module named 'scripts'", result.stdout + result.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()
