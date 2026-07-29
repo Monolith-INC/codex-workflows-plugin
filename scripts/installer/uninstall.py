@@ -153,12 +153,7 @@ def _plan_clean_hook_config(plan: UninstallPlan, config_path: Path, *, prune_sto
 
 
 def _plan_project_asset_cleanup(plan: UninstallPlan, project_root: Path, install_dir: Path) -> None:
-    asset_root = install_dir / ".agent"
-    if not asset_root.is_dir():
-        return
-
-    for rel in ("workflows", "rules"):
-        source_dir = asset_root / rel
+    for rel, source_dir in _project_asset_sources(install_dir):
         project_dir = project_root / ".agent" / rel
         if not source_dir.is_dir() or not project_dir.exists():
             continue
@@ -166,6 +161,19 @@ def _plan_project_asset_cleanup(plan: UninstallPlan, project_root: Path, install
             if source_file.is_file():
                 relative = source_file.relative_to(source_dir)
                 _plan_remove_path(plan, project_dir / relative, prune_stop=project_root)
+
+
+def _project_asset_sources(install_dir: Path) -> tuple[tuple[str, Path], ...]:
+    asset_root = install_dir / ".agent"
+    workflow_src = asset_root / "workflows"
+    if not workflow_src.is_dir():
+        workflow_src = install_dir / "skills" / "codex_workflows" / "resources"
+
+    rules_src = asset_root / "rules"
+    if not rules_src.is_dir():
+        rules_src = install_dir / "skills" / "codex_workflows" / "rules"
+
+    return (("workflows", workflow_src), ("rules", rules_src))
 
 
 def _plan_project_discovery_cleanup(plan: UninstallPlan, project_root: Path, install_dir: Path) -> None:
