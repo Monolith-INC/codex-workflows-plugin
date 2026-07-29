@@ -11,6 +11,11 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 _(nothing yet)_
 
+## [0.5.9] - 2026-07-29
+
+### Fixed
+- Codex `PreToolUse` hooks no longer emit the unsupported `permissionDecision: "allow"` response for successful checks; allowed calls now exit silently, while denials use the current hook-specific schema.
+
 ## [0.5.8] - 2026-07-28
 
 ### Fixed
