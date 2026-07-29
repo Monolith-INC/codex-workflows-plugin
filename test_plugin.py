@@ -35,7 +35,17 @@ class TestCodexEnforceHook(unittest.TestCase):
             text=True
         )
         stdout, stderr = process.communicate(input=json.dumps(stdin_data))
-        return json.loads(stdout.strip())
+        output = stdout.strip()
+        return json.loads(output) if output else None
+
+    def assert_allowed(self, result):
+        self.assertIsNone(result)
+
+    def assert_denied(self, result, expected_reason):
+        hook_output = result["hookSpecificOutput"]
+        self.assertEqual(hook_output["hookEventName"], "PreToolUse")
+        self.assertEqual(hook_output["permissionDecision"], "deny")
+        self.assertIn(expected_reason, hook_output["permissionDecisionReason"])
         
     def test_allow_generic_tool(self):
         stdin = {
@@ -45,7 +55,7 @@ class TestCodexEnforceHook(unittest.TestCase):
             }
         }
         res = self.run_hook(stdin)
-        self.assertEqual(res["permissionDecision"], "allow")
+        self.assert_allowed(res)
         
     def test_deny_destructive_delete(self):
         stdin = {
@@ -55,8 +65,7 @@ class TestCodexEnforceHook(unittest.TestCase):
             }
         }
         res = self.run_hook(stdin)
-        self.assertEqual(res["permissionDecision"], "deny")
-        self.assertIn("Destructive deletions", res["reason"])
+        self.assert_denied(res, "Destructive deletions")
         
     def test_allow_markdown_outside_former_allowlist(self):
         unallowed_path = os.path.join(self.test_dir, "docs", "notes.md")
@@ -67,7 +76,7 @@ class TestCodexEnforceHook(unittest.TestCase):
             }
         }
         res = self.run_hook(stdin)
-        self.assertEqual(res["permissionDecision"], "allow")
+        self.assert_allowed(res)
         
     def test_allow_claude_markdown(self):
         allowed_path = os.path.join(self.test_dir, "CLAUDE.md")
@@ -78,7 +87,7 @@ class TestCodexEnforceHook(unittest.TestCase):
             }
         }
         res = self.run_hook(stdin)
-        self.assertEqual(res["permissionDecision"], "allow")
+        self.assert_allowed(res)
         
     def test_deny_write_without_session(self):
         code_file = os.path.join(self.test_dir, "lib", "utils.dart")
@@ -89,8 +98,9 @@ class TestCodexEnforceHook(unittest.TestCase):
             }
         }
         res = self.run_hook(stdin)
-        self.assertEqual(res["permissionDecision"], "deny")
-        self.assertIn("Write blocked. You must initialize today's Agent Session", res["reason"])
+        self.assert_denied(
+            res, "Write blocked. You must initialize today's Agent Session"
+        )
         
     def test_allow_write_with_session(self):
         # Create an active session file for today
@@ -110,7 +120,7 @@ class TestCodexEnforceHook(unittest.TestCase):
             }
         }
         res = self.run_hook(stdin)
-        self.assertEqual(res["permissionDecision"], "allow")
+        self.assert_allowed(res)
 
     def test_deny_shell_redirect_without_session(self):
         code_file = os.path.join(self.test_dir, "lib", "utils.dart")
@@ -121,8 +131,9 @@ class TestCodexEnforceHook(unittest.TestCase):
             }
         }
         res = self.run_hook(stdin)
-        self.assertEqual(res["permissionDecision"], "deny")
-        self.assertIn("Write blocked. You must initialize today's Agent Session", res["reason"])
+        self.assert_denied(
+            res, "Write blocked. You must initialize today's Agent Session"
+        )
 
     def test_allow_shell_redirect_to_markdown_with_session(self):
         sessions_dir = os.path.join(self.vault_dir, "Agent_Sessions")
@@ -141,7 +152,7 @@ class TestCodexEnforceHook(unittest.TestCase):
             }
         }
         res = self.run_hook(stdin)
-        self.assertEqual(res["permissionDecision"], "allow")
+        self.assert_allowed(res)
 
     def test_allow_shell_redirect_with_session(self):
         sessions_dir = os.path.join(self.vault_dir, "Agent_Sessions")
@@ -160,7 +171,7 @@ class TestCodexEnforceHook(unittest.TestCase):
             }
         }
         res = self.run_hook(stdin)
-        self.assertEqual(res["permissionDecision"], "allow")
+        self.assert_allowed(res)
 
     def test_allow_ticket_move_ready_to_active(self):
         stdin = {
@@ -170,7 +181,7 @@ class TestCodexEnforceHook(unittest.TestCase):
             }
         }
         res = self.run_hook(stdin)
-        self.assertEqual(res["permissionDecision"], "allow")
+        self.assert_allowed(res)
 
     def test_deny_ticket_move_ready_to_resolved(self):
         stdin = {
@@ -180,8 +191,7 @@ class TestCodexEnforceHook(unittest.TestCase):
             }
         }
         res = self.run_hook(stdin)
-        self.assertEqual(res["permissionDecision"], "deny")
-        self.assertIn("must be moved to Tickets/Active/", res["reason"])
+        self.assert_denied(res, "must be moved to Tickets/Active/")
 
     def test_allow_bugfix_move_active_to_resolved(self):
         stdin = {
@@ -191,7 +201,7 @@ class TestCodexEnforceHook(unittest.TestCase):
             }
         }
         res = self.run_hook(stdin)
-        self.assertEqual(res["permissionDecision"], "allow")
+        self.assert_allowed(res)
 
     def test_deny_bugfix_move_active_to_closed(self):
         stdin = {
@@ -201,8 +211,7 @@ class TestCodexEnforceHook(unittest.TestCase):
             }
         }
         res = self.run_hook(stdin)
-        self.assertEqual(res["permissionDecision"], "deny")
-        self.assertIn("must be moved to Tickets/Resolved/", res["reason"])
+        self.assert_denied(res, "must be moved to Tickets/Resolved/")
 
     def test_allow_task_move_active_to_closed(self):
         stdin = {
@@ -212,7 +221,7 @@ class TestCodexEnforceHook(unittest.TestCase):
             }
         }
         res = self.run_hook(stdin)
-        self.assertEqual(res["permissionDecision"], "allow")
+        self.assert_allowed(res)
 
     def test_deny_task_move_active_to_resolved(self):
         stdin = {
@@ -222,8 +231,7 @@ class TestCodexEnforceHook(unittest.TestCase):
             }
         }
         res = self.run_hook(stdin)
-        self.assertEqual(res["permissionDecision"], "deny")
-        self.assertIn("must be moved to Tickets/Closed/", res["reason"])
+        self.assert_denied(res, "must be moved to Tickets/Closed/")
 
     def test_deny_write_task_to_resolved(self):
         stdin = {
@@ -234,8 +242,9 @@ class TestCodexEnforceHook(unittest.TestCase):
             }
         }
         res = self.run_hook(stdin)
-        self.assertEqual(res["permissionDecision"], "deny")
-        self.assertIn("Only bugfix tickets can be written to Tickets/Resolved/", res["reason"])
+        self.assert_denied(
+            res, "Only bugfix tickets can be written to Tickets/Resolved/"
+        )
 
     def test_deny_write_bugfix_to_closed(self):
         stdin = {
@@ -246,8 +255,9 @@ class TestCodexEnforceHook(unittest.TestCase):
             }
         }
         res = self.run_hook(stdin)
-        self.assertEqual(res["permissionDecision"], "deny")
-        self.assertIn("Bugfix tickets cannot be written to Tickets/Closed/", res["reason"])
+        self.assert_denied(
+            res, "Bugfix tickets cannot be written to Tickets/Closed/"
+        )
 
     def test_plugin_manifest_exists(self):
         manifest_path = os.path.join(self.old_cwd, ".codex-plugin", "plugin.json")
@@ -302,8 +312,7 @@ class TestCodexEnforceHook(unittest.TestCase):
             "transcriptPath": os.path.join(self.test_dir, "nonexistent.jsonl")
         }
         res = self.run_hook(stdin)
-        self.assertEqual(res["permissionDecision"], "deny")
-        self.assertIn("You must update YouTrack issue", res["reason"])
+        self.assert_denied(res, "You must update YouTrack issue")
 
     def test_allow_write_active_with_youtrack_update(self):
         # Create an active session file for today to pass session check
@@ -326,7 +335,7 @@ class TestCodexEnforceHook(unittest.TestCase):
             "transcriptPath": transcript_path
         }
         res = self.run_hook(stdin)
-        self.assertEqual(res["permissionDecision"], "allow")
+        self.assert_allowed(res)
 
     def test_deny_write_closed_without_youtrack_done(self):
         content = "---\nyoutrack: SEUMEI-501\ntype: task\nstatus: closed\n---"
@@ -339,8 +348,7 @@ class TestCodexEnforceHook(unittest.TestCase):
             "transcriptPath": os.path.join(self.test_dir, "nonexistent.jsonl")
         }
         res = self.run_hook(stdin)
-        self.assertEqual(res["permissionDecision"], "deny")
-        self.assertIn("You must update YouTrack issue", res["reason"])
+        self.assert_denied(res, "You must update YouTrack issue")
 
     def test_allow_write_closed_with_youtrack_done(self):
         sessions_dir = os.path.join(self.vault_dir, "Agent_Sessions")
@@ -362,7 +370,7 @@ class TestCodexEnforceHook(unittest.TestCase):
             "transcriptPath": transcript_path
         }
         res = self.run_hook(stdin)
-        self.assertEqual(res["permissionDecision"], "allow")
+        self.assert_allowed(res)
 
     def init_git_repo(self):
         # Helper to initialize a real git repo in test_dir
@@ -392,8 +400,10 @@ class TestCodexEnforceHook(unittest.TestCase):
             }
         }
         res = self.run_hook(stdin)
-        self.assertEqual(res["permissionDecision"], "deny")
-        self.assertIn("Cannot start a ticket while checked out on the base integration branch", res["reason"])
+        self.assert_denied(
+            res,
+            "Cannot start a ticket while checked out on the base integration branch",
+        )
 
     def test_deny_start_ticket_out_of_sync(self):
         self.init_git_repo()
@@ -431,8 +441,7 @@ class TestCodexEnforceHook(unittest.TestCase):
             }
         }
         res = self.run_hook(stdin)
-        self.assertEqual(res["permissionDecision"], "deny")
-        self.assertIn("out of sync", res["reason"])
+        self.assert_denied(res, "out of sync")
 
     def test_deny_start_ticket_with_unmerged_commits(self):
         self.init_git_repo()
@@ -461,8 +470,9 @@ class TestCodexEnforceHook(unittest.TestCase):
             }
         }
         res = self.run_hook(stdin)
-        self.assertEqual(res["permissionDecision"], "deny")
-        self.assertIn("contains unmerged commits from another feature/bugfix branch", res["reason"])
+        self.assert_denied(
+            res, "contains unmerged commits from another feature/bugfix branch"
+        )
 
     def test_deny_start_ticket_when_another_active_exists(self):
         # Create active directory and an existing active ticket file
@@ -478,8 +488,9 @@ class TestCodexEnforceHook(unittest.TestCase):
             }
         }
         res = self.run_hook(stdin)
-        self.assertEqual(res["permissionDecision"], "deny")
-        self.assertIn("There is already an active ticket in Tickets/Active", res["reason"])
+        self.assert_denied(
+            res, "There is already an active ticket in Tickets/Active"
+        )
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -52,6 +53,9 @@ class TestBootstrapUninstall(unittest.TestCase):
             self.assertTrue((project / ".claude" / "skills").is_dir())
             self.assertTrue((project / ".agents" / "skills").is_dir())
             self.assertTrue((project / ".claude" / "commands").is_dir())
+            self.assertTrue((install_dir / "skills" / "codex_workflows" / "resources").is_dir())
+            if (install_dir / ".agent").exists():
+                shutil.rmtree(install_dir / ".agent")
             claude_config = project / ".claude" / "settings.json"
             claude_settings = json.loads(claude_config.read_text(encoding="utf-8"))
             claude_settings["hooks"]["PreToolUse"].append(

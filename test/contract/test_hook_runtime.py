@@ -1,4 +1,6 @@
 import unittest
+from contextlib import redirect_stdout
+from io import StringIO
 from pathlib import Path
 from unittest import mock
 
@@ -20,6 +22,14 @@ from scripts.policy.git_branch_guard import evaluate_git_branch_guard
 
 
 class TestHookRuntime(unittest.TestCase):
+    def test_allowed_decision_emits_no_output(self):
+        stdout = StringIO()
+
+        with redirect_stdout(stdout):
+            hook_runtime.emit_decision("codex", hook_runtime.PolicyDecision.allow())
+
+        self.assertEqual(stdout.getvalue(), "")
+
     def test_select_adapter_maps_clients_to_expected_handlers(self):
         parser, formatter = select_adapter("codex")
         self.assertIs(parser, parse_codex_payload)

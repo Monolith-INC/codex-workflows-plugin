@@ -9,7 +9,7 @@
       "name": "codex-workflows-plugin",
       "source": "./",
       "description": "Client-adaptive workflow and enforcement plugin for Codex-style agent hosts.",
-      "version": "0.5.8"
+      "version": "0.5.9"
     }
   ]
 }
