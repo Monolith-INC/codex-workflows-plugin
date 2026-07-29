@@ -2,7 +2,7 @@
 
 A portable, multi-host workspace automation plugin that enforces session bootstrapping, ticket lifecycle governance, YouTrack state gating, and git safety checks across agent-driven development workflows.
 
-> **v0.5.9** — Codex-compatible `PreToolUse` decisions, session continuity, protected-branch git guard, and **project-only install** (`--dest` required; no global/`$HOME` install).
+> **v0.5.10** — Codex-compatible `PreToolUse` decisions, Codex MCP provisioning, session continuity, protected-branch git guard, and **project-only install** (`--dest` required; no global/`$HOME` install).
 
 ## Purpose
 
