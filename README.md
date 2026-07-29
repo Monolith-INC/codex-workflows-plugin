@@ -58,7 +58,7 @@ The orchestrator exposes workflow skills as MCP tools over stdio:
 python3 -m scripts.orchestrator.mcp_server
 ```
 
-Add to a project's `.mcp.json` (bootstrap does this automatically with `--dest`):
+Bootstrap writes the MCP server to Claude-compatible `.mcp.json` and Codex-readable `.codex/config.toml` when `--dest` is provided:
 
 ```json
 {
@@ -158,7 +158,7 @@ Bootstrap does the following under `--dest`:
 1. **Installs the runtime** to `<dest>/.codex-workflows/` (hook commands reference this path).
 2. **Wires project hook configs** (for example `.claude/settings.json`, `.cursor/hooks.json`, `.agents/hooks.json`).
 3. **Syncs discovery trees**: Claude skills/commands under `.claude/skills/` and `.claude/commands/`; Antigravity skills under `.agents/skills/`; workflows/rules under `.agent/`.
-4. **Merges** an `agentic-orchestrator` MCP entry into the project's `.mcp.json` when wiring.
+4. **Merges** an `agentic-orchestrator` MCP entry into the project's `.mcp.json` and mirrors project MCP servers into `.codex/config.toml` for Codex.
 
 > **After bootstrapping, restart your agent session in that project** so hooks and skills reload.
 
@@ -224,7 +224,7 @@ curl -fsSL https://github.com/theocarranza/codex-workflows-plugin/releases/lates
   | bash -s -- --dest /path/to/your/project --uninstall
 ```
 
-Removes managed project hooks, synced discovery/workflow assets, the orchestrator MCP entry, and `<dest>/.codex-workflows/` (unless `--keep-runtime`).
+Removes managed project hooks, synced discovery/workflow assets, the plugin's orchestrator MCP entry, and `<dest>/.codex-workflows/` (unless `--keep-runtime`).
 
 
 ## Tests
