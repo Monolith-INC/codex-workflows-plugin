@@ -26,11 +26,19 @@ class TestCodexAdapter(unittest.TestCase):
 
         response = format_codex_decision(decision)
 
-        self.assertEqual(response["permissionDecision"], "deny")
-        self.assertEqual(response["reason"], "Blocked by policy")
-        self.assertIn("hookSpecificOutput", response)
-        self.assertEqual(response["hookSpecificOutput"]["permissionDecision"], "deny")
-        self.assertEqual(response["hookSpecificOutput"]["reason"], "Blocked by policy")
+        self.assertEqual(
+            response,
+            {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "deny",
+                    "permissionDecisionReason": "Blocked by policy",
+                }
+            },
+        )
+
+    def test_formats_allowed_codex_decision_without_permission(self):
+        self.assertEqual(format_codex_decision(PolicyDecision.allow()), {})
 
 
 if __name__ == "__main__":

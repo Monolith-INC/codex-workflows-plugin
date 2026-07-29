@@ -10,7 +10,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 class TestClaudeHookSubprocess(unittest.TestCase):
-    def _run_hook(self, payload: dict) -> dict:
+    def _run_hook(self, payload: dict) -> str:
         process = subprocess.Popen(
             [sys.executable, str(HOOK_PATH)],
             stdin=subprocess.PIPE,
@@ -22,38 +22,22 @@ class TestClaudeHookSubprocess(unittest.TestCase):
         stdout, stderr = process.communicate(input=json.dumps(payload))
 
         self.assertEqual(process.returncode, 0, stderr)
-        return json.loads(stdout.strip())
+        return stdout
 
-    def test_bash_allow_output_matches_claude_pretooluse_schema(self):
-        response = self._run_hook({"tool_name": "Bash", "tool_input": {"command": "echo hi"}})
+    def test_bash_allow_emits_no_output(self):
+        stdout = self._run_hook({"tool_name": "Bash", "tool_input": {"command": "echo hi"}})
 
-        self.assertEqual(
-            response,
-            {
-                "hookSpecificOutput": {
-                    "hookEventName": "PreToolUse",
-                    "permissionDecision": "allow",
-                }
-            },
-        )
+        self.assertEqual(stdout, "")
 
     def test_markdown_read_outside_former_allowlist_is_allowed(self):
-        response = self._run_hook(
+        stdout = self._run_hook(
             {
                 "tool_name": "Read",
                 "tool_input": {"file_path": str(PROJECT_ROOT / "docs" / "private.md")},
             }
         )
 
-        self.assertEqual(
-            response,
-            {
-                "hookSpecificOutput": {
-                    "hookEventName": "PreToolUse",
-                    "permissionDecision": "allow",
-                }
-            },
-        )
+        self.assertEqual(stdout, "")
 
 
 if __name__ == "__main__":

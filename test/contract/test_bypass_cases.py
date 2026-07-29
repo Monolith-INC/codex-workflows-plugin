@@ -21,9 +21,16 @@ class TestBypassCases(unittest.TestCase):
 
         response = json.loads(stdout.strip())
 
-        self.assertEqual(response["permissionDecision"], "deny")
-        self.assertEqual(response["reason"], "Invalid hook payload")
-        self.assertEqual(response["hookSpecificOutput"]["reason"], "Invalid hook payload")
+        self.assertEqual(
+            response,
+            {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "deny",
+                    "permissionDecisionReason": "Invalid hook payload",
+                }
+            },
+        )
 
 
 if __name__ == "__main__":

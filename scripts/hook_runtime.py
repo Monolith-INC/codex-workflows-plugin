@@ -87,6 +87,9 @@ def select_adapter(client: str) -> tuple[Callable[[dict[str, Any], str, str], Ca
 
 
 def emit_decision(client: str, decision: PolicyDecision) -> None:
+    if not decision.is_denied():
+        return
+
     _, formatter = select_adapter(client)
     print(json.dumps(formatter(decision)))
 

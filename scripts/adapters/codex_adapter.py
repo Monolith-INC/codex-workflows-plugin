@@ -29,15 +29,16 @@ def parse_codex_payload(payload: dict[str, Any], *, project_root: str, vault_dir
 
 
 def format_codex_decision(decision: PolicyDecision) -> dict[str, Any]:
-    response = {
-        "permissionDecision": "deny" if decision.is_denied() else "allow",
-        "reason": decision.reason,
+    if not decision.is_denied():
+        return {}
+
+    return {
         "hookSpecificOutput": {
-            "permissionDecision": "deny" if decision.is_denied() else "allow",
-            "reason": decision.reason,
-        },
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "deny",
+            "permissionDecisionReason": decision.reason,
+        }
     }
-    return response
 
 
 def _parse_ticket_paths(command: str) -> tuple[str | None, str | None]:
