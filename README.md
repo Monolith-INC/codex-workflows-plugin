@@ -2,7 +2,7 @@
 
 A portable, multi-host workspace automation plugin that enforces session bootstrapping, ticket lifecycle governance, YouTrack state gating, and git safety checks across agent-driven development workflows.
 
-> **v0.5.7** — Session continuity, `/skip-ledger`, protected-branch git guard, and **project-only install** (`--dest` required; no global/`$HOME` install).
+> **v0.5.8** — Session continuity, `/skip-ledger`, protected-branch git guard, and **project-only install** (`--dest` required; no global/`$HOME` install).
 
 ## Purpose
 

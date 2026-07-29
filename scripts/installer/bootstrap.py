@@ -3,7 +3,7 @@
 Usage
 -----
 From the release zip:
-    python3 bootstrap.py codex-workflows-plugin-0.5.7.zip --target all-agents --dest /path/to/project
+    python3 bootstrap.py codex-workflows-plugin-0.5.8.zip --target all-agents --dest /path/to/project
 
 From source after cloning:
     python3 -m scripts.installer.bootstrap --target all-agents --dest /path/to/project

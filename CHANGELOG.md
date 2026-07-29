@@ -11,6 +11,12 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 _(nothing yet)_
 
+## [0.5.8] - 2026-07-28
+
+### Fixed
+- `install.sh` standalone bootstrap: put `install_dir` on `sys.path` before importing `scripts.installer` modules so wiring no longer raises `ModuleNotFoundError: No module named 'scripts'`.
+- Legacy `test_plugin` session fixtures now use current timestamps so allow-with-session cases do not fail the 8-hour gate after 20:00 local.
+
 ## [0.5.7] - 2026-07-25
 
 ### Added
