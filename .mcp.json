@@ -1,9 +1,13 @@
 {
   "mcpServers": {
-    "azure-devops": {
-      "command": "npx",
-      "args": ["-y", "@azure-devops/mcp", "bhave-tecnologia-comportamental"]
-    },
+    "Azure DevOps Codex Workflows Integration": {
+      "command": "~/.nvm/versions/node/v24.18.0/bin/npx",
+      "args": [
+        "@azure-devops/mcp",
+        "${AZURE_DEVOPS_ORG}"
+      ]
+    }
+  },
     "agentic-orchestrator": {
       "command": "python3",
       "args": ["-m", "scripts.orchestrator.mcp_server"]
