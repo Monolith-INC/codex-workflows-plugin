@@ -5,9 +5,15 @@ Returns a structured directive when specs or the resolution report are missing.
 
 from __future__ import annotations
 
+import os
+import sys
 from typing import Any
 
-from scripts.resolution_runtime import ResolutionPlan
+_SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
+if _SCRIPTS_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPTS_DIR)
+
+from resolution_runtime import ResolutionPlan
 
 
 def on_resolve_ticket(plan: ResolutionPlan) -> dict[str, Any] | None:

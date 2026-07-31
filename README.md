@@ -2,7 +2,7 @@
 
 A portable, multi-host workspace automation plugin that enforces session bootstrapping, ticket lifecycle governance, YouTrack state gating, and git safety checks across agent-driven development workflows.
 
-> **v0.5.17** — Codex-compatible `PreToolUse` decisions, Codex MCP provisioning, session continuity, protected-branch git guard, and **project-only install** (`--dest` required; no global/`$HOME` install).
+> **v0.5.18** — Cursor hook import path + failClosed allow JSON, cwd-independent MCP launcher (`run_mcp_server.py`), Codex/Cursor harness wiring, and **project-only install** (`--dest` required; no global/`$HOME` install).
 
 ## Purpose
 
@@ -52,11 +52,19 @@ Slash commands live in `commands/` and are registered into the Claude plugin cac
 
 ### Agentic Orchestrator (MCP)
 
-The orchestrator exposes workflow skills as MCP tools over stdio:
+The orchestrator exposes workflow skills as MCP tools over stdio.
+
+Plugin installs (Cursor / Claude marketplace) use the cwd-independent launcher and
+`${CLAUDE_PLUGIN_ROOT}` (Cursor expands this the same way Claude Code does):
 
 ```bash
-python3 -m scripts.orchestrator.mcp_server
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/orchestrator/run_mcp_server.py"
 ```
+
+Project installs from bootstrap write an absolute path to that launcher plus
+`PYTHONPATH` / `ORCHESTRATOR_SKILLS_DIR`. Do not use
+`python3 -m scripts.orchestrator.mcp_server` for host MCP configs — Cursor does
+not put the plugin root on `PYTHONPATH` or set cwd to the plugin root.
 
 Bootstrap writes the MCP server when `--dest` is provided:
 
@@ -70,7 +78,7 @@ Bootstrap writes the MCP server when `--dest` is provided:
   "mcpServers": {
     "agentic-orchestrator": {
       "command": "python3",
-      "args": ["-m", "scripts.orchestrator.mcp_server"],
+      "args": ["/path/to/plugin/scripts/orchestrator/run_mcp_server.py"],
       "env": {
         "PYTHONPATH": "/path/to/plugin",
         "ORCHESTRATOR_SKILLS_DIR": "/path/to/plugin/skills"
@@ -90,7 +98,9 @@ Each skill under `skills/<name>/` carries a `manifest.json` with `input_schema` 
 
 - Plugin metadata: `.codex-plugin/plugin.json`
 - Claude marketplace metadata: `.claude-plugin/`
+- Cursor marketplace metadata: `.cursor-plugin/plugin.json` (hooks → `hooks/hooks-cursor.json`, MCP → `.mcp.json`)
 - Claude Code marketplace hook wiring (consumed via `${CLAUDE_PLUGIN_ROOT}` when this repo is loaded directly as a plugin, routes to `claude_enforce_hook.py`): `hooks/hooks.json`
+- Cursor marketplace hook wiring (`${CURSOR_PLUGIN_ROOT}`, `failClosed`): `hooks/hooks-cursor.json`
 - Shared skill bundles: `skills/`
 - Slash commands: `commands/`
 - Release packager: `scripts/release_packager.py` emits `dist/codex-workflows-plugin-<version>.zip`
@@ -188,11 +198,11 @@ Project hook config paths:
 | Target | Project config wired | Hook event |
 |---|---|---|
 | `claude` | `.claude/settings.json` | `PreToolUse` |
-| `cursor` | `.cursor/hooks.json` | `preToolUse` |
-| `gemini` | `.gemini/settings.json` (Deprecated) | `BeforeTool` |
-| `codex` | `hooks/hooks.json` | `PreToolUse` |
+| `cursor` | `.cursor/hooks.json` (relative hook path; `failClosed`) | `preToolUse` |
+| `gemini` | `.gemini/settings.json` (Deprecated; timeout ms) | `BeforeTool` |
+| `codex` | `.codex/hooks.json` (project layer; marketplace default remains `hooks/hooks.json`) | `PreToolUse` |
 | `antigravity` | `.agents/hooks.json` | `PreToolUse` |
-| `antigravity-cli` | `.gemini/antigravity-cli/settings.json` | `BeforeTool` |
+| `antigravity-cli` | `.gemini/antigravity-cli/settings.json` (timeout ms) | `BeforeTool` |
 | `all-agents` | all of the above under `--dest` | — |
 
 Hook wiring is idempotent — re-running bootstrap strips stale managed entries before writing fresh hooks.

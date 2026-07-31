@@ -7,8 +7,10 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../"))
-if REPO_ROOT not in sys.path:
-    sys.path.insert(0, REPO_ROOT)
+SCRIPTS_DIR = os.path.join(REPO_ROOT, "scripts")
+for path in (REPO_ROOT, SCRIPTS_DIR):
+    if path not in sys.path:
+        sys.path.insert(0, path)
 
 from scripts.hook_runtime import get_project_root, get_vault_dir, run  # noqa: E402
 
@@ -90,7 +92,7 @@ def main() -> int:
     try:
         input_data = json.load(sys.stdin)
     except Exception:
-        from scripts.policy import PolicyDecision  # noqa: E402
+        from policy import PolicyDecision  # noqa: E402
         from scripts.hook_runtime import emit_decision  # noqa: E402
 
         emit_decision(HOOK_CLIENT, PolicyDecision.deny("Invalid hook payload"))

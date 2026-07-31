@@ -181,7 +181,11 @@ class TestWizardRemediation(unittest.TestCase):
                         "mcpServers": {
                             "agentic-orchestrator": {
                                 "command": "python3",
-                                "args": ["-m", "scripts.orchestrator.mcp_server"],
+                                "args": [
+                                    str(
+                                        (runtime / "scripts" / "orchestrator" / "run_mcp_server.py").resolve()
+                                    )
+                                ],
                                 "env": {
                                     "PYTHONPATH": str(runtime.resolve()),
                                     "ORCHESTRATOR_SKILLS_DIR": str((runtime / "skills").resolve()),

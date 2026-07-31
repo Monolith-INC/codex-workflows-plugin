@@ -3,7 +3,7 @@
   "hooks": {
     "preToolUse": [
       {
-        "command": "python3 skills/codex_workflows/scripts/cursor_enforce_hook.py",
+        "command": "python3 ${CURSOR_PLUGIN_ROOT}/skills/codex_workflows/scripts/cursor_enforce_hook.py",
         "matcher": "Shell|Read|Write|Grep|Delete|Task",
         "timeout": 5,
         "failClosed": true

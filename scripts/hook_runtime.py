@@ -7,7 +7,12 @@ import sys
 from datetime import datetime
 from typing import Any, Callable
 
-from scripts.adapters import (
+# Bare packages under scripts/ (adapters, policy, …) require this directory on sys.path.
+_SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
+if _SCRIPTS_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPTS_DIR)
+
+from adapters import (
     format_antigravity_decision,
     format_claude_decision,
     format_codex_decision,
@@ -19,8 +24,13 @@ from scripts.adapters import (
     parse_cursor_payload,
     parse_gemini_payload,
 )
-from scripts.payload_capture import capture_hook_payload
-from scripts.ticket_runtime import (
+from payload_capture import capture_hook_payload
+from policy import CanonicalToolEvent, PolicyDecision, evaluate
+from policy.git_branch_guard import evaluate_git_branch_guard
+from policy.ledger_skip import is_ledger_skipped
+from policy.session_gate import evaluate_session_gate
+from policy.shell_utils import extract_shell_write_targets
+from ticket_runtime import (
     YouTrackCheckResult,
     check_youtrack_state_in_transcript,
     extract_ticket_paths,
@@ -28,11 +38,6 @@ from scripts.ticket_runtime import (
     get_youtrack_issue_id_from_write,
     infer_is_bugfix_ticket,
 )
-from scripts.policy import CanonicalToolEvent, PolicyDecision, evaluate
-from scripts.policy.git_branch_guard import evaluate_git_branch_guard
-from scripts.policy.ledger_skip import is_ledger_skipped
-from scripts.policy.session_gate import evaluate_session_gate
-from scripts.policy.shell_utils import extract_shell_write_targets
 
 LOG_FILE = "/tmp/codex_hook_debug.log"
 
@@ -87,7 +92,9 @@ def select_adapter(client: str) -> tuple[Callable[[dict[str, Any], str, str], Ca
 
 
 def emit_decision(client: str, decision: PolicyDecision) -> None:
-    if not decision.is_denied():
+    # Cursor failClosed treats empty stdout as a block; always emit JSON there.
+    # Other hosts keep silent allow (deny-only stdout).
+    if not decision.is_denied() and client.strip().lower() != "cursor":
         return
 
     _, formatter = select_adapter(client)

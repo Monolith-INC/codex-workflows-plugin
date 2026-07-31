@@ -1,5 +1,15 @@
 """Host adapter utilities."""
 
+from __future__ import annotations
+
+import os
+import sys
+
+# Bare imports (policy, …) need scripts/ on path when loaded as scripts.adapters.
+_SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _SCRIPTS_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPTS_DIR)
+
 from .antigravity_adapter import format_antigravity_decision, parse_antigravity_payload
 from .codex_adapter import format_codex_decision, parse_codex_payload
 from .claude_adapter import format_claude_decision, parse_claude_payload

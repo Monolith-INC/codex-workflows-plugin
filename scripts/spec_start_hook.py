@@ -6,9 +6,15 @@ Returns a structured directive for the agent to run write-spec when specs are mi
 
 from __future__ import annotations
 
+import os
+import sys
 from typing import Any
 
-from scripts.spec_runtime import SpecPlan
+_SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
+if _SCRIPTS_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPTS_DIR)
+
+from spec_runtime import SpecPlan
 
 
 def on_start_ticket(spec_plan: SpecPlan) -> dict[str, Any] | None:

@@ -1,10 +1,12 @@
 {
   "name": "codex-workflows-plugin",
   "displayName": "Codex Workflows",
-  "version": "0.2.8",
+  "version": "0.5.18",
   "description": "Client-adaptive workflow and enforcement plugin for Codex-style agent hosts",
   "author": {
     "name": "agentrick"
   },
-  "skills": "./skills/"
+  "skills": "./skills/",
+  "hooks": "./hooks/hooks-cursor.json",
+  "mcpServers": "./.mcp.json"
 }

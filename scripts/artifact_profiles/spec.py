@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING
 
-from scripts.artifact_reflection import ArtifactContext, CriticProfile
+from artifact_reflection import ArtifactContext, CriticProfile
 
 if TYPE_CHECKING:
     pass

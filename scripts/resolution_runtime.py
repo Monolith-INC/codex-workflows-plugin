@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+import os
 import re
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from scripts.spec_runtime import (
+_SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
+if _SCRIPTS_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPTS_DIR)
+
+from spec_runtime import (
     list_existing_specs,
     read_ticket_ledger,
     slug_ticket_id,

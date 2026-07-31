@@ -319,12 +319,19 @@ def verify_install(dest: Path, target: str) -> list[CheckResult]:
     )
 
     expected_configs = {
-        "all-agents": [".claude/settings.json", ".cursor/hooks.json", "hooks/hooks.json"],
+        "all-agents": [
+            ".claude/settings.json",
+            ".cursor/hooks.json",
+            ".codex/hooks.json",
+            ".gemini/settings.json",
+            ".agents/hooks.json",
+        ],
         "claude": [".claude/settings.json"],
         "cursor": [".cursor/hooks.json"],
-        "codex": ["hooks/hooks.json"],
+        "codex": [".codex/hooks.json"],
         "gemini": [".gemini/settings.json"],
         "antigravity": [".agents/hooks.json"],
+        "antigravity-cli": [".gemini/antigravity-cli/settings.json"],
     }
     for rel in expected_configs.get(target, expected_configs["all-agents"]):
         path = dest / rel

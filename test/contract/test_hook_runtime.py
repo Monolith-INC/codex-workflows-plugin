@@ -1,10 +1,17 @@
+import sys
 import unittest
 from contextlib import redirect_stdout
 from io import StringIO
 from pathlib import Path
 from unittest import mock
 
-from scripts.adapters import (
+ROOT = Path(__file__).resolve().parents[2]
+SCRIPTS_DIR = ROOT / "scripts"
+for path in (ROOT, SCRIPTS_DIR):
+    if str(path) not in sys.path:
+        sys.path.insert(0, str(path))
+
+from adapters import (
     format_antigravity_decision,
     format_claude_decision,
     format_codex_decision,
@@ -18,7 +25,7 @@ from scripts.adapters import (
 )
 from scripts import hook_runtime
 from scripts.hook_runtime import select_adapter
-from scripts.policy.git_branch_guard import evaluate_git_branch_guard
+from policy.git_branch_guard import evaluate_git_branch_guard
 
 
 class TestHookRuntime(unittest.TestCase):
@@ -56,7 +63,7 @@ class TestHookRuntime(unittest.TestCase):
         self.assertIn('"run_shell_command"', source)
 
         with mock.patch(
-            "scripts.policy.git_branch_guard._run_git_cmd",
+            "policy.git_branch_guard._run_git_cmd",
             return_value="master",
         ):
             decision = evaluate_git_branch_guard("git commit -m 'x'", "/tmp/repo")
