@@ -11,6 +11,19 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 _(nothing yet)_
 
+## [0.5.15] - 2026-07-31
+
+### Added
+- Interactive `install.sh` wizard when `--dest` is omitted (`/dev/tty`), with project detection, post-install verification, and re-wire remediation.
+- Cursor `.cursor/mcp.json` MCP mirror and Claude `.claude/settings.local.json` project MCP enablement during bootstrap.
+- Codex/Cursor Azure DevOps interactive browser session env forwarding (`DISPLAY`, `WAYLAND_DISPLAY`, `XAUTHORITY`, `DBUS_SESSION_BUS_ADDRESS`, `XDG_RUNTIME_DIR`, `BROWSER`) when `@azure-devops/mcp` is already present with interactive auth.
+
+### Fixed
+- `wire()` / bootstrap restore `sys.path` and prior `scripts.*` modules after preferring the install runtime, so temporary install trees no longer break later imports (including the unittest suite).
+
+### Changed
+- Uninstall also cleans Cursor MCP orchestrator entries and Claude local MCP enablement for `agentic-orchestrator`.
+
 ## [0.5.9] - 2026-07-29
 
 ### Fixed
