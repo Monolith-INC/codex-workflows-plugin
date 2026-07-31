@@ -7,6 +7,7 @@ import zipfile
 from pathlib import Path
 
 from scripts.installer.bootstrap import (
+    _codex_mcp_server_config,
     default_install_dir,
     install_from_source,
     install_from_zip,
@@ -239,6 +240,10 @@ class TestInstallCLI(unittest.TestCase):
             config = (project / ".codex" / "config.toml").read_text(encoding="utf-8")
             self.assertIn("[mcp_servers.azure-devops]", config)
             self.assertIn('args = ["-y", "@azure-devops/mcp", "bhave-tecnologia-comportamental"]', config)
+            self.assertIn(
+                'env_vars = ["DISPLAY", "WAYLAND_DISPLAY", "XAUTHORITY", "DBUS_SESSION_BUS_ADDRESS", "XDG_RUNTIME_DIR", "BROWSER"]',
+                config,
+            )
             self.assertIn("[mcp_servers.azure-devops.tools.core_list_projects]", config)
             self.assertIn('approval_mode = "approve"', config)
             self.assertNotIn('command = "old-npx"', config)
@@ -246,6 +251,39 @@ class TestInstallCLI(unittest.TestCase):
             self.assertIn(f'CODEX_PROJECT_ROOT = "{project}"', config)
             self.assertIn("[mcp_servers.agentic-orchestrator.env]", config)
             self.assertIn(f'ORCHESTRATOR_SKILLS_DIR = "{project / ".codex-workflows" / "skills"}"', config)
+
+    def test_codex_azure_browser_env_is_added_only_for_interactive_auth(self):
+        interactive = _codex_mcp_server_config(
+            {
+                "command": "npx",
+                "args": ["-y", "@azure-devops/mcp", "contoso"],
+                "env_vars": ["HOME", "DISPLAY"],
+            }
+        )
+        non_interactive = {
+            "command": "npx",
+            "args": [
+                "-y",
+                "@azure-devops/mcp",
+                "contoso",
+                "--authentication",
+                "envvar",
+            ],
+        }
+
+        self.assertEqual(
+            interactive["env_vars"],
+            [
+                "HOME",
+                "DISPLAY",
+                "WAYLAND_DISPLAY",
+                "XAUTHORITY",
+                "DBUS_SESSION_BUS_ADDRESS",
+                "XDG_RUNTIME_DIR",
+                "BROWSER",
+            ],
+        )
+        self.assertIs(_codex_mcp_server_config(non_interactive), non_interactive)
 
 
 class TestStandaloneBootstrapZipInstall(unittest.TestCase):

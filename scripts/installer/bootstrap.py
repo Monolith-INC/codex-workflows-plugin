@@ -32,6 +32,15 @@ _MANAGED_HOOK_SCRIPTS = {
 
 _RUNTIME_DIRS = ["scripts", "skills", "commands", ".agent", "hooks", ".codex-plugin"]
 
+_INTERACTIVE_AZURE_DEVOPS_ENV_VARS = [
+    "DISPLAY",
+    "WAYLAND_DISPLAY",
+    "XAUTHORITY",
+    "DBUS_SESSION_BUS_ADDRESS",
+    "XDG_RUNTIME_DIR",
+    "BROWSER",
+]
+
 
 def default_install_dir(project_dest: Path) -> Path:
     """Project-local runtime root (never ~/.codex-workflows)."""
@@ -88,7 +97,7 @@ def strip_managed_hooks(config: dict, script_names: set[str]) -> dict:
 
 
 def wire_orchestrator_mcp(install_dir: Path, project_dest: Path) -> bool:
-    """Merge MCP servers into Claude-compatible JSON and Codex TOML config."""
+    """Merge MCP servers into project JSON, Cursor, Claude enablement, and Codex TOML."""
     mcp_path = project_dest / ".mcp.json"
     existing: dict = {"mcpServers": {}}
     if mcp_path.exists():
@@ -110,9 +119,82 @@ def wire_orchestrator_mcp(install_dir: Path, project_dest: Path) -> bool:
     try:
         mcp_path.write_text(json.dumps(existing, indent=2) + "\n", encoding="utf-8")
         _write_codex_mcp_config(project_dest, servers)
+        _write_cursor_mcp_config(project_dest, servers)
+        _enable_claude_project_mcp(project_dest, servers)
     except OSError:
         return False
     return True
+
+
+def _write_cursor_mcp_config(project_dest: Path, servers: dict) -> None:
+    """Mirror project MCP servers into Cursor's project mcp.json."""
+    cursor_path = project_dest / ".cursor" / "mcp.json"
+    cursor_path.parent.mkdir(parents=True, exist_ok=True)
+    existing: dict = {"mcpServers": {}}
+    if cursor_path.exists():
+        try:
+            payload = json.loads(cursor_path.read_text(encoding="utf-8"))
+            if isinstance(payload, dict):
+                existing = payload
+        except json.JSONDecodeError:
+            existing = {"mcpServers": {}}
+
+    cursor_servers = existing.setdefault("mcpServers", {})
+    if not isinstance(cursor_servers, dict):
+        cursor_servers = {}
+        existing["mcpServers"] = cursor_servers
+
+    for name, config in servers.items():
+        if isinstance(config, dict):
+            cursor_servers[name] = _cursor_mcp_server_config(config)
+
+    cursor_path.write_text(json.dumps(existing, indent=2) + "\n", encoding="utf-8")
+
+
+def _cursor_mcp_server_config(config: dict) -> dict:
+    """Forward Azure interactive session vars via Cursor ${env:NAME} interpolation."""
+    args = config.get("args")
+    if not isinstance(args, list) or not any(
+        isinstance(arg, str) and arg.startswith("@azure-devops/mcp")
+        for arg in args
+    ):
+        return dict(config)
+
+    authentication = _mcp_authentication_arg(args)
+    if authentication not in {None, "interactive"}:
+        return dict(config)
+
+    env = dict(config["env"]) if isinstance(config.get("env"), dict) else {}
+    for name in _INTERACTIVE_AZURE_DEVOPS_ENV_VARS:
+        env.setdefault(name, f"${{env:{name}}}")
+    return {**config, "env": env}
+
+
+def _enable_claude_project_mcp(project_dest: Path, servers: dict) -> None:
+    """Approve project .mcp.json servers in Claude local settings (not VCS-tracked)."""
+    settings_path = project_dest / ".claude" / "settings.local.json"
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+    existing: dict = {}
+    if settings_path.exists():
+        try:
+            payload = json.loads(settings_path.read_text(encoding="utf-8"))
+            if isinstance(payload, dict):
+                existing = payload
+        except json.JSONDecodeError:
+            existing = {}
+
+    names = sorted(name for name, value in servers.items() if isinstance(value, dict))
+    enabled = existing.get("enabledMcpjsonServers")
+    if not isinstance(enabled, list):
+        enabled = []
+    merged = list(enabled)
+    for name in names:
+        if name not in merged:
+            merged.append(name)
+
+    existing["enableAllProjectMcpServers"] = True
+    existing["enabledMcpjsonServers"] = merged
+    settings_path.write_text(json.dumps(existing, indent=2) + "\n", encoding="utf-8")
 
 
 def _write_codex_mcp_config(project_dest: Path, servers: dict) -> None:
@@ -122,7 +204,7 @@ def _write_codex_mcp_config(project_dest: Path, servers: dict) -> None:
     server_names = {name for name, value in servers.items() if isinstance(value, dict)}
     base = _strip_codex_mcp_server_sections(existing, server_names).rstrip()
     rendered = "\n\n".join(
-        _render_codex_mcp_server(name, config)
+        _render_codex_mcp_server(name, _codex_mcp_server_config(config))
         for name, config in sorted(servers.items())
         if isinstance(config, dict)
     )
@@ -176,6 +258,38 @@ def _render_codex_mcp_server(name: str, config: dict) -> str:
         for key, value in sorted(env.items()):
             lines.append(f"{_toml_key(key)} = {_toml_value(value)}")
     return "\n".join(lines)
+
+
+def _codex_mcp_server_config(config: dict) -> dict:
+    """Forward the desktop session required by Azure interactive browser auth."""
+    args = config.get("args")
+    if not isinstance(args, list) or not any(
+        isinstance(arg, str) and arg.startswith("@azure-devops/mcp")
+        for arg in args
+    ):
+        return config
+
+    authentication = _mcp_authentication_arg(args)
+    if authentication not in {None, "interactive"}:
+        return config
+
+    env_vars = config.get("env_vars", [])
+    if not isinstance(env_vars, list):
+        return config
+
+    forwarded = [
+        *env_vars,
+        *(name for name in _INTERACTIVE_AZURE_DEVOPS_ENV_VARS if name not in env_vars),
+    ]
+    return {**config, "env_vars": forwarded}
+
+
+def _mcp_authentication_arg(args: list) -> str | None:
+    for index, arg in enumerate(args[:-1]):
+        if arg in {"--authentication", "-a"}:
+            value = args[index + 1]
+            return value if isinstance(value, str) else None
+    return None
 
 
 def _toml_key(value: str) -> str:
@@ -314,6 +428,9 @@ def wire(install_dir: Path, target: str, project_dest: str | Path) -> int:
 
     if wire_orchestrator_mcp(install_dir, dest_path):
         print(f"Wired agentic-orchestrator MCP server → {dest_path / '.mcp.json'}")
+        print(f"  Codex MCP mirror → {dest_path / '.codex' / 'config.toml'}")
+        print(f"  Cursor MCP mirror → {dest_path / '.cursor' / 'mcp.json'}")
+        print(f"  Claude MCP enablement → {dest_path / '.claude' / 'settings.local.json'}")
     else:
         print(
             f"Warning: Could not write agentic-orchestrator MCP config to {dest_path / '.mcp.json'}",

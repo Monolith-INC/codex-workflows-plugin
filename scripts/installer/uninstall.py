@@ -47,6 +47,8 @@ def uninstall(
     _plan_project_discovery_cleanup(plan, project_root, install_dir)
     _plan_mcp_cleanup(plan, project_root)
     _plan_codex_mcp_cleanup(plan, project_root)
+    _plan_cursor_mcp_cleanup(plan, project_root)
+    _plan_claude_mcp_enablement_cleanup(plan, project_root)
 
     if not keep_runtime:
         _plan_remove_path(plan, install_dir, prune_stop=install_dir.parent)
@@ -233,6 +235,56 @@ def _plan_codex_mcp_cleanup(plan: UninstallPlan, project_root: Path) -> None:
         plan.messages.append(f"Write cleaned Codex MCP config: {config_path}")
     else:
         _plan_remove_path(plan, config_path, prune_stop=project_root)
+
+
+def _plan_cursor_mcp_cleanup(plan: UninstallPlan, project_root: Path) -> None:
+    cursor_path = project_root / ".cursor" / "mcp.json"
+    if not cursor_path.exists():
+        return
+    try:
+        payload = json.loads(cursor_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        plan.messages.append(f"Skipped invalid JSON Cursor MCP config: {cursor_path}")
+        return
+    servers = payload.get("mcpServers") if isinstance(payload, dict) else None
+    if not isinstance(servers, dict) or "agentic-orchestrator" not in servers:
+        return
+    cleaned = dict(payload)
+    cleaned_servers = dict(servers)
+    cleaned_servers.pop("agentic-orchestrator", None)
+    cleaned["mcpServers"] = cleaned_servers
+    if not cleaned_servers and set(cleaned) <= {"mcpServers"}:
+        _plan_remove_path(plan, cursor_path, prune_stop=project_root)
+    else:
+        plan.write_json[cursor_path] = cleaned
+        plan.messages.append(f"Write cleaned Cursor MCP config: {cursor_path}")
+
+
+def _plan_claude_mcp_enablement_cleanup(plan: UninstallPlan, project_root: Path) -> None:
+    settings_path = project_root / ".claude" / "settings.local.json"
+    if not settings_path.exists():
+        return
+    try:
+        payload = json.loads(settings_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        plan.messages.append(f"Skipped invalid JSON Claude local settings: {settings_path}")
+        return
+    if not isinstance(payload, dict):
+        return
+    enabled = payload.get("enabledMcpjsonServers")
+    if not isinstance(enabled, list) or "agentic-orchestrator" not in enabled:
+        return
+    cleaned = dict(payload)
+    cleaned["enabledMcpjsonServers"] = [name for name in enabled if name != "agentic-orchestrator"]
+    if (
+        not cleaned["enabledMcpjsonServers"]
+        and cleaned.get("enableAllProjectMcpServers") is True
+        and set(cleaned) <= {"enabledMcpjsonServers", "enableAllProjectMcpServers"}
+    ):
+        _plan_remove_path(plan, settings_path, prune_stop=project_root)
+    else:
+        plan.write_json[settings_path] = cleaned
+        plan.messages.append(f"Write cleaned Claude MCP enablement: {settings_path}")
 
 
 def _strip_codex_mcp_server_sections(content: str, server_names: set[str]) -> str:

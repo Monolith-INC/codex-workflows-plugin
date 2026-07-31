@@ -58,7 +58,12 @@ The orchestrator exposes workflow skills as MCP tools over stdio:
 python3 -m scripts.orchestrator.mcp_server
 ```
 
-Bootstrap writes the MCP server to Claude-compatible `.mcp.json` and Codex-readable `.codex/config.toml` when `--dest` is provided:
+Bootstrap writes the MCP server when `--dest` is provided:
+
+1. Claude-compatible `.mcp.json` (shared project MCP root)
+2. Codex `.codex/config.toml` mirror (with Azure interactive `env_vars` name forwarding when `@azure-devops/mcp` is already present)
+3. Cursor `.cursor/mcp.json` mirror (Azure interactive session vars use Cursor `${env:NAME}` interpolation)
+4. Claude `.claude/settings.local.json` enablement (`enableAllProjectMcpServers` + `enabledMcpjsonServers`)
 
 ```json
 {
@@ -74,6 +79,8 @@ Bootstrap writes the MCP server to Claude-compatible `.mcp.json` and Codex-reada
   }
 }
 ```
+
+Azure DevOps is never invented by the installer; if it already exists in `.mcp.json`, Codex gets `env_vars = ["DISPLAY", …]` and Cursor gets matching `${env:DISPLAY}` entries so interactive browser auth can see the desktop session. Claude/Gemini typically inherit the parent session environment for `.mcp.json` servers once enabled.
 
 Each skill under `skills/<name>/` carries a `manifest.json` with `input_schema` and `output_signature` consumed by the orchestrator.
 
@@ -158,7 +165,7 @@ Bootstrap does the following under `--dest`:
 1. **Installs the runtime** to `<dest>/.codex-workflows/` (hook commands reference this path).
 2. **Wires project hook configs** (for example `.claude/settings.json`, `.cursor/hooks.json`, `.agents/hooks.json`).
 3. **Syncs discovery trees**: Claude skills/commands under `.claude/skills/` and `.claude/commands/`; Antigravity skills under `.agents/skills/`; workflows/rules under `.agent/`.
-4. **Merges** an `agentic-orchestrator` MCP entry into the project's `.mcp.json` and mirrors project MCP servers into `.codex/config.toml` for Codex.
+4. **Merges** an `agentic-orchestrator` MCP entry into the project's `.mcp.json`, mirrors servers into `.codex/config.toml` and `.cursor/mcp.json`, and enables project MCP servers in `.claude/settings.local.json`.
 
 > **After bootstrapping, restart your agent session in that project** so hooks and skills reload.
 
@@ -224,7 +231,7 @@ curl -fsSL https://github.com/theocarranza/codex-workflows-plugin/releases/lates
   | bash -s -- --dest /path/to/your/project --uninstall
 ```
 
-Removes managed project hooks, synced discovery/workflow assets, the plugin's orchestrator MCP entry, and `<dest>/.codex-workflows/` (unless `--keep-runtime`).
+Removes managed project hooks, synced discovery/workflow assets, the plugin's orchestrator MCP entries (`.mcp.json`, `.codex/config.toml`, `.cursor/mcp.json`, Claude local enablement), and `<dest>/.codex-workflows/` (unless `--keep-runtime`).
 
 
 ## Tests
@@ -241,10 +248,45 @@ CI also runs `python3 scripts/validate_plugin.py .` to verify the plugin manifes
 
 ## Release
 
+Generate the release artifacts from the repository root:
+
+1. Confirm the version in `.codex-plugin/plugin.json`.
+
+   ```bash
+   python3.12 -c "import json; print(json.load(open('.codex-plugin/plugin.json'))['version'])"
+   ```
+
+2. Build the release archive.
+
+   ```bash
+   python3.12 -m scripts.release_packager --output-dir dist/
+   ```
+
+3. Confirm the generated files.
+
+   ```bash
+   ls -lh dist/
+   ```
+
+4. Upload the artifacts to the matching GitHub release.
+
+   ```bash
+   VERSION=$(python3.12 -c "import json; print(json.load(open('.codex-plugin/plugin.json'))['version'])")
+   gh release upload "v${VERSION}" "dist/codex-workflows-plugin-${VERSION}.zip" install.sh --clobber
+   ```
+
+5. Verify the release now has downloadable assets.
+
+   ```bash
+   gh release view "v${VERSION}" --json tagName,assets
+   ```
+
+Shortcut for local packaging only:
+
 ```bash
-python3 -m scripts.release_packager --output-dir dist/
+python3.12 -m scripts.release_packager --output-dir dist/
 ```
 
-Emits `dist/codex-workflows-plugin-<version>.zip`. Version is read from `.codex-plugin/plugin.json`. The archive includes plugin metadata, hooks, skills, commands, scripts, `install.sh`, and docs — `__pycache__` and test directories are excluded.
+This emits `dist/codex-workflows-plugin-<version>.zip`. Version is read from `.codex-plugin/plugin.json`. The archive includes plugin metadata, hooks, skills, commands, scripts, `install.sh`, and docs. `__pycache__` and test directories are excluded.
 
 See [CHANGELOG.md](./CHANGELOG.md) for full version history.
