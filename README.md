@@ -2,7 +2,7 @@
 
 A portable, multi-host workspace automation plugin that enforces session bootstrapping, ticket lifecycle governance, YouTrack state gating, and git safety checks across agent-driven development workflows.
 
-> **v0.5.18** — Cursor hook import path + failClosed allow JSON, cwd-independent MCP launcher (`run_mcp_server.py`), Codex/Cursor harness wiring, and **project-only install** (`--dest` required; no global/`$HOME` install).
+> **v0.5.19** — Staged feature-development skills (`feature-implementation` start, `reconcile-feature-stack`, `finish-feature-development`) with paired workflows/TypeScript rules for stacked Feature→Story delivery; installer syncs `.ts` rules.
 
 ## Purpose
 
@@ -30,7 +30,7 @@ scripts/
 commands/                 # Slash commands synced to Claude plugin cache on bootstrap
 skills/                   # Skill folders + manifest.json for orchestrator MCP discovery
 .agent/workflows/         # Workflow guides synced to target projects on install
-.agent/rules/             # Coding & governance rule files synced to target projects
+.agent/rules/             # Coding & governance rules (.md / .ts) synced to target projects
 ```
 
 ## Skills & Slash Commands

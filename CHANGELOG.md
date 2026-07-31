@@ -11,6 +11,19 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 _(nothing yet)_
 
+## [0.5.19] - 2026-07-31
+
+### Added
+- Stage-scoped feature development skills for stacked Feature→Story delivery (#19):
+  - `feature-implementation` start stage: `workflows-start-feature-development.md` + `rules-start-feature-development.ts`, agent call hook, resume cues, and handoff to reconcile/finish.
+  - `reconcile-feature-stack` skill + workflow/rules for ancestor→descendant stack sync while Story PRs stay open.
+  - `finish-feature-development` skill + workflow/rules for Feature→trunk closeout after Stories merge.
+- Installer `sync_shared_assets` copies TypeScript rules (`.ts`) alongside markdown rules.
+
+### Changed
+- README skill table documents start / reconcile / finish feature-development skills.
+- Legacy `workflows-feature-implementation.md` points at the start-stage workflow/rules.
+
 ## [0.5.18] - 2026-07-31
 
 ### Fixed
