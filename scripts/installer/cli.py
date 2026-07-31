@@ -72,7 +72,7 @@ def sync_shared_assets(dest_root: str | Path, plugin_root: Path | None = None) -
         dst_dir = dest / ".agent" / "rules"
         dst_dir.mkdir(parents=True, exist_ok=True)
         for item in rules_src.iterdir():
-            if item.is_file() and item.suffix == ".md":
+            if item.is_file() and item.suffix in {".md", ".ts"}:
                 shutil.copy2(item, dst_dir / item.name)
             elif item.is_dir():
                 shutil.copytree(item, dst_dir / item.name, dirs_exist_ok=True)

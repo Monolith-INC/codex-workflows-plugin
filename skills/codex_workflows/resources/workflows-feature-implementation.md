@@ -4,6 +4,8 @@ description: End-to-end flow for implementing features using the Codex Ledger
 
 # Feature Implementation Workflow
 
+> Prefer stage workflow: [workflows-start-feature-development.md](./workflows-start-feature-development.md) with rules `rules-start-feature-development.ts`. Mid-stack: `reconcile-feature-stack`. Closeout: `finish-feature-development`.
+
 This workflow provides a rigorous, documentation-first protocol for feature development, ensuring all architectural decisions are anchored in the **AI_Codex**.
 
 ## 1. Context & Research (The Mandate)
@@ -40,5 +42,6 @@ This workflow provides a rigorous, documentation-first protocol for feature deve
 ## Usage & Invocation Examples
 
 - `/implement-feature` (Assumes a ticket is already active)
+- `/feature-implementation` → start stage assets above
 
 **Architect Tip**: The Codex Ledger is your source of truth. If the model restarts, reading the active ticket file will restore your entire implementation state.
