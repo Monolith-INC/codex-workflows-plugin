@@ -11,6 +11,11 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 _(nothing yet)_
 
+## [0.5.17] - 2026-07-31
+
+### Changed
+- Document interactive install as `bash <(curl …)` so the shell keeps a TTY for wizard prompts; plain `curl | bash` is called out as a common cause of "no interactive terminal".
+
 ## [0.5.16] - 2026-07-31
 
 ### Fixed
