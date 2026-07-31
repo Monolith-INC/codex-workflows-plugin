@@ -72,6 +72,7 @@ class TestVerifyInstall(unittest.TestCase):
             self.assertEqual(by_name["runtime-dir"].remedy_key, "rewire")
 
     def test_passes_core_paths_after_bootstrap_wire(self):
+        import scripts
         from scripts.installer.bootstrap import install_from_source, wire
 
         plugin_root = Path(__file__).resolve().parents[2]
@@ -84,6 +85,17 @@ class TestVerifyInstall(unittest.TestCase):
             checks = verify_install(root, "claude")
             failed = [check.name for check in checks if not check.ok and check.name != "python-version"]
             self.assertEqual(failed, [], failed)
+
+        # wire() must not leave the temporary runtime on sys.path / scripts cache.
+        import importlib
+
+        importlib.reload(scripts)
+        from scripts.installer import bootstrap as bootstrap_mod
+
+        self.assertTrue(
+            str(bootstrap_mod.__file__).startswith(str(plugin_root)),
+            bootstrap_mod.__file__,
+        )
 
 
 class TestWizardRemediation(unittest.TestCase):

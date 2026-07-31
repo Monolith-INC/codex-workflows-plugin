@@ -19,7 +19,9 @@ import json
 import shutil
 import sys
 import zipfile
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
+from typing import Iterator
 
 # Script filenames that belong to this plugin — used to strip stale hook entries.
 _MANAGED_HOOK_SCRIPTS = {
@@ -308,145 +310,159 @@ def _toml_value(value) -> str:
     return json.dumps(str(value))
 
 
-def _ensure_install_import_path(install_dir: Path) -> None:
-    """Prefer the installed tree for ``scripts.*`` imports.
+@contextmanager
+def _install_import_path(install_dir: Path) -> Iterator[None]:
+    """Prefer the installed tree for ``scripts.*`` imports, then restore.
 
-    ``install.sh`` extracts ``bootstrap.py`` to a temp path and runs it as a
-    standalone file, so there is no package context until ``install_dir`` is on
-    ``sys.path``. Clear cached ``scripts`` modules so a prior source checkout
-    import cannot shadow the installed copy.
+    ``install.sh`` / bootstrap may run against a project runtime that is not the
+    source checkout. Clear cached ``scripts`` modules so a prior import cannot
+    shadow the installed copy. Always restore ``sys.path`` and prior modules so
+    in-process callers (and the unittest suite) are not left pointing at a
+    temporary install tree that may already be deleted.
     """
     install_root = str(Path(install_dir).resolve())
-    if install_root not in sys.path:
+    inserted = install_root not in sys.path
+    if inserted:
         sys.path.insert(0, install_root)
-    for mod_name in list(sys.modules):
-        if mod_name == "scripts" or mod_name.startswith("scripts."):
-            del sys.modules[mod_name]
+    saved = {
+        name: sys.modules.pop(name)
+        for name in list(sys.modules)
+        if name == "scripts" or name.startswith("scripts.")
+    }
+    try:
+        yield
+    finally:
+        for name in list(sys.modules):
+            if name == "scripts" or name.startswith("scripts."):
+                del sys.modules[name]
+        if inserted:
+            while install_root in sys.path:
+                sys.path.remove(install_root)
+        sys.modules.update(saved)
 
 
 def wire(install_dir: Path, target: str, project_dest: str | Path) -> int:
     """Wire hooks and discovery assets into a project. Global install is not supported."""
-    _ensure_install_import_path(install_dir)
-
-    from scripts.installer.purge_markdown_allowlist import (  # noqa: PLC0415
-        purge_allowlist_config_files,
-    )
-    from scripts.installer.cli import install  # noqa: PLC0415
-    from scripts.installer.cursor_hooks import (  # noqa: PLC0415
-        desired_cursor_hooks,
-        merge_cursor_hooks,
-        strip_managed_cursor_hooks,
-    )
-    from scripts.installer.targets import Target  # noqa: PLC0415
-
-    dest_path = Path(project_dest).expanduser().resolve()
-    purge_report = purge_allowlist_config_files(
-        dest=dest_path,
-        dry_run=False,
-        include_cwd=False,
-    )
-    for message in purge_report.messages:
-        print(message)
-
-    client_names = {
-        "claude": "Claude CLI (claude-cli) & IDE plugin",
-        "gemini": "Gemini CLI (gemini) [Deprecated]",
-        "codex": "Codex CLI (codex-cli) & IDE plugin",
-        "antigravity": "Antigravity IDE",
-        "antigravity-cli": "Antigravity CLI (antigravity-cli)",
-        "cursor": "Cursor IDE",
-    }
-
-    if target == "all-agents":
-        targets = [t.value for t in Target if t not in {Target.UNIVERSAL, Target.ALL_AGENTS}]
-    else:
-        targets = [target]
-
-    successful_wirings: list[tuple[str, str, str | None]] = []
-    skipped_wirings: list[tuple[str, str]] = []
-    failed_wirings: list[tuple[str, str]] = []
-
-    for t in targets:
-        client_name = client_names.get(t, t)
-        if t == "cursor":
-            hook_command = f"python3 {install_dir / 'skills/codex_workflows/scripts/cursor_enforce_hook.py'}"
-            config_path = dest_path / ".cursor" / "hooks.json"
-            try:
-                on_disk = None
-                if config_path.exists():
-                    on_disk = json.loads(config_path.read_text(encoding="utf-8"))
-                if on_disk:
-                    on_disk = strip_managed_cursor_hooks(on_disk, _MANAGED_HOOK_SCRIPTS)
-                final_config = merge_cursor_hooks(on_disk, desired_cursor_hooks(hook_command))
-                config_path.parent.mkdir(parents=True, exist_ok=True)
-                config_path.write_text(json.dumps(final_config, indent=2) + "\n", encoding="utf-8")
-                successful_wirings.append((client_name, str(config_path), hook_command))
-            except Exception as e:
-                failed_wirings.append((client_name, str(e)))
-            continue
-
-        try:
-            result = install(t, dest_root=dest_path, plugin_root=install_dir)
-            if result.config_paths:
-                config_path = dest_path / result.config_paths[0]
-                cmd = result.merged_config and _extract_command(result.merged_config)
-                successful_wirings.append((client_name, str(config_path), cmd))
-            else:
-                skipped_wirings.append((client_name, "No config paths defined for target"))
-        except Exception as e:
-            failed_wirings.append((client_name, f"Exception: {e}"))
-
-    print("\n" + "=" * 70)
-    print("                      WIRING INSTALLATION SUMMARY                      ")
-    print("=" * 70)
-
-    if successful_wirings:
-        print("Successfully Wired Clients:")
-        for client, path, cmd in successful_wirings:
-            print(f"  ✔ {client}")
-            print(f"    Config file: {path}")
-            if cmd:
-                print(f"    Hook command: {cmd}")
-            print()
-
-    if skipped_wirings:
-        print("Skipped Clients:")
-        for client, reason in skipped_wirings:
-            print(f"  ✗ {client}")
-            print(f"    Reason: {reason}")
-            print()
-
-    if failed_wirings:
-        print("FAILED Clients:")
-        for client, error_msg in failed_wirings:
-            print(f"  🛑 {client}")
-            print(f"     Error: {error_msg}")
-            print()
-        print("Error: Wiring failed for one or more requested clients.")
-        print("=" * 70 + "\n")
-        return 1
-
-    if wire_orchestrator_mcp(install_dir, dest_path):
-        print(f"Wired agentic-orchestrator MCP server → {dest_path / '.mcp.json'}")
-        print(f"  Codex MCP mirror → {dest_path / '.codex' / 'config.toml'}")
-        print(f"  Cursor MCP mirror → {dest_path / '.cursor' / 'mcp.json'}")
-        print(f"  Claude MCP enablement → {dest_path / '.claude' / 'settings.local.json'}")
-    else:
-        print(
-            f"Warning: Could not write agentic-orchestrator MCP config to {dest_path / '.mcp.json'}",
-            file=sys.stderr,
+    with _install_import_path(install_dir):
+        from scripts.installer.purge_markdown_allowlist import (  # noqa: PLC0415
+            purge_allowlist_config_files,
         )
+        from scripts.installer.cli import install  # noqa: PLC0415
+        from scripts.installer.cursor_hooks import (  # noqa: PLC0415
+            desired_cursor_hooks,
+            merge_cursor_hooks,
+            strip_managed_cursor_hooks,
+        )
+        from scripts.installer.targets import Target  # noqa: PLC0415
 
-    if target == "all-agents" and not successful_wirings:
-        print("Error: None of the agent clients could be successfully wired.", file=sys.stderr)
+        dest_path = Path(project_dest).expanduser().resolve()
+        purge_report = purge_allowlist_config_files(
+            dest=dest_path,
+            dry_run=False,
+            include_cwd=False,
+        )
+        for message in purge_report.messages:
+            print(message)
+
+        client_names = {
+            "claude": "Claude CLI (claude-cli) & IDE plugin",
+            "gemini": "Gemini CLI (gemini) [Deprecated]",
+            "codex": "Codex CLI (codex-cli) & IDE plugin",
+            "antigravity": "Antigravity IDE",
+            "antigravity-cli": "Antigravity CLI (antigravity-cli)",
+            "cursor": "Cursor IDE",
+        }
+
+        if target == "all-agents":
+            targets = [t.value for t in Target if t not in {Target.UNIVERSAL, Target.ALL_AGENTS}]
+        else:
+            targets = [target]
+
+        successful_wirings: list[tuple[str, str, str | None]] = []
+        skipped_wirings: list[tuple[str, str]] = []
+        failed_wirings: list[tuple[str, str]] = []
+
+        for t in targets:
+            client_name = client_names.get(t, t)
+            if t == "cursor":
+                hook_command = f"python3 {install_dir / 'skills/codex_workflows/scripts/cursor_enforce_hook.py'}"
+                config_path = dest_path / ".cursor" / "hooks.json"
+                try:
+                    on_disk = None
+                    if config_path.exists():
+                        on_disk = json.loads(config_path.read_text(encoding="utf-8"))
+                    if on_disk:
+                        on_disk = strip_managed_cursor_hooks(on_disk, _MANAGED_HOOK_SCRIPTS)
+                    final_config = merge_cursor_hooks(on_disk, desired_cursor_hooks(hook_command))
+                    config_path.parent.mkdir(parents=True, exist_ok=True)
+                    config_path.write_text(json.dumps(final_config, indent=2) + "\n", encoding="utf-8")
+                    successful_wirings.append((client_name, str(config_path), hook_command))
+                except Exception as e:
+                    failed_wirings.append((client_name, str(e)))
+                continue
+
+            try:
+                result = install(t, dest_root=dest_path, plugin_root=install_dir)
+                if result.config_paths:
+                    config_path = dest_path / result.config_paths[0]
+                    cmd = result.merged_config and _extract_command(result.merged_config)
+                    successful_wirings.append((client_name, str(config_path), cmd))
+                else:
+                    skipped_wirings.append((client_name, "No config paths defined for target"))
+            except Exception as e:
+                failed_wirings.append((client_name, f"Exception: {e}"))
+
+        print("\n" + "=" * 70)
+        print("                      WIRING INSTALLATION SUMMARY                      ")
+        print("=" * 70)
+
+        if successful_wirings:
+            print("Successfully Wired Clients:")
+            for client, path, cmd in successful_wirings:
+                print(f"  ✔ {client}")
+                print(f"    Config file: {path}")
+                if cmd:
+                    print(f"    Hook command: {cmd}")
+                print()
+
+        if skipped_wirings:
+            print("Skipped Clients:")
+            for client, reason in skipped_wirings:
+                print(f"  ✗ {client}")
+                print(f"    Reason: {reason}")
+                print()
+
+        if failed_wirings:
+            print("FAILED Clients:")
+            for client, error_msg in failed_wirings:
+                print(f"  🛑 {client}")
+                print(f"     Error: {error_msg}")
+                print()
+            print("Error: Wiring failed for one or more requested clients.")
+            print("=" * 70 + "\n")
+            return 1
+
+        if wire_orchestrator_mcp(install_dir, dest_path):
+            print(f"Wired agentic-orchestrator MCP server → {dest_path / '.mcp.json'}")
+            print(f"  Codex MCP mirror → {dest_path / '.codex' / 'config.toml'}")
+            print(f"  Cursor MCP mirror → {dest_path / '.cursor' / 'mcp.json'}")
+            print(f"  Claude MCP enablement → {dest_path / '.claude' / 'settings.local.json'}")
+        else:
+            print(
+                f"Warning: Could not write agentic-orchestrator MCP config to {dest_path / '.mcp.json'}",
+                file=sys.stderr,
+            )
+
+        if target == "all-agents" and not successful_wirings:
+            print("Error: None of the agent clients could be successfully wired.", file=sys.stderr)
+            print("=" * 70 + "\n")
+            return 1
+
+        print("Further Instructions:")
+        print("  1. Restart your active CLI / IDE client session in this project.")
+        print("  2. Claude discovers skills/commands under .claude/; Antigravity under .agents/skills/.")
         print("=" * 70 + "\n")
-        return 1
-
-    print("Further Instructions:")
-    print("  1. Restart your active CLI / IDE client session in this project.")
-    print("  2. Claude discovers skills/commands under .claude/; Antigravity under .agents/skills/.")
-    print("=" * 70 + "\n")
-    return 0
+        return 0
 
 
 def _extract_command(config: dict) -> str | None:
@@ -562,58 +578,65 @@ def main() -> int:
         install_from_zip(zip_path, install_dir)
         installed_runtime = True
 
-    if (install_dir / "scripts").is_dir():
-        _ensure_install_import_path(install_dir)
+    import_path_cm = (
+        _install_import_path(install_dir)
+        if (install_dir / "scripts").is_dir()
+        else nullcontext()
+    )
 
-    if args.uninstall:
-        from scripts.installer.uninstall import uninstall  # noqa: PLC0415
+    with import_path_cm:
+        if args.uninstall:
+            from scripts.installer.uninstall import uninstall  # noqa: PLC0415
 
-        plan = uninstall(
-            install_dir,
-            dest=dest_path,
-            keep_runtime=args.keep_runtime,
-            dry_run=args.dry_run,
-        )
-        print("\n".join(plan.messages) if plan.messages else "No managed plugin interventions found.")
-        return 0
-
-    if args.purge_allowlist:
-        from scripts.installer.purge_markdown_allowlist import (  # noqa: PLC0415
-            purge_markdown_allowlist_artifacts,
-            scan_markdown_allowlist_artifacts,
-        )
-
-        dry = args.dry_run or args.scan_only
-        if args.scan_only:
-            report = scan_markdown_allowlist_artifacts(dest=dest_path)
-        else:
-            report = purge_markdown_allowlist_artifacts(dest=dest_path, dry_run=dry)
-        print("\n".join(report.messages) if report.messages else "No markdown-allowlist artifacts found.")
-        if args.scan_only or dry or not args.target:
+            plan = uninstall(
+                install_dir,
+                dest=dest_path,
+                keep_runtime=args.keep_runtime,
+                dry_run=args.dry_run,
+            )
+            print("\n".join(plan.messages) if plan.messages else "No managed plugin interventions found.")
             return 0
 
-    if not installed_runtime:
-        if args.target and install_dir.exists() and is_running_from_install_dir:
-            pass  # wire-only from already-installed tree
-        else:
-            source_root = Path(__file__).parent.parent.parent
-            print(f"Installing from source → {install_dir} ...")
-            install_from_source(source_root, install_dir)
-            print(f"Installed to {install_dir}")
-            _ensure_install_import_path(install_dir)
+        if args.purge_allowlist:
+            from scripts.installer.purge_markdown_allowlist import (  # noqa: PLC0415
+                purge_markdown_allowlist_artifacts,
+                scan_markdown_allowlist_artifacts,
+            )
 
-    if args.target:
-        print(f"\nWiring {args.target} → {dest_path} ...")
-        return wire(install_dir, args.target, dest_path)
+            dry = args.dry_run or args.scan_only
+            if args.scan_only:
+                report = scan_markdown_allowlist_artifacts(dest=dest_path)
+            else:
+                report = purge_markdown_allowlist_artifacts(dest=dest_path, dry_run=dry)
+            print("\n".join(report.messages) if report.messages else "No markdown-allowlist artifacts found.")
+            if args.scan_only or dry or not args.target:
+                return 0
 
-    print("\n" + "=" * 70)
-    print("                  INSTALLATION COMPLETED SUCCESSFULLY                  ")
-    print("=" * 70)
-    print(f"Runtime installed to: {install_dir}")
-    print("To wire agent hosts in this project, run:")
-    print(f"  python3 -m scripts.installer.bootstrap --target all-agents --dest {dest_path}")
-    print("=" * 70 + "\n")
-    return 0
+        if not installed_runtime:
+            if args.target and install_dir.exists() and is_running_from_install_dir:
+                pass  # wire-only from already-installed tree
+            else:
+                source_root = Path(__file__).parent.parent.parent
+                print(f"Installing from source → {install_dir} ...")
+                install_from_source(source_root, install_dir)
+                print(f"Installed to {install_dir}")
+
+        if args.target:
+            print(f"\nWiring {args.target} → {dest_path} ...")
+            # Re-enter install import path after source install may have created scripts/.
+            if not (install_dir / "scripts").is_dir():
+                print(f"error: runtime scripts missing under {install_dir}", file=sys.stderr)
+                return 1
+            return wire(install_dir, args.target, dest_path)
+
+        print("\n" + "=" * 70)
+        print("                  INSTALLATION COMPLETED SUCCESSFULLY                  ")
+        print("=" * 70)
+        print(f"Runtime installed to: {install_dir}")
+        print("To wire agent hosts in this project, run:")
+        print(f"  python3 -m scripts.installer.bootstrap --target all-agents --dest {dest_path}")
+        print("=" * 70 + "\n")
+        return 0
 
 
 if __name__ == "__main__":
