@@ -118,6 +118,7 @@ fi
 
 ZIP_PATH="$TMP_DIR/codex-workflows-plugin.zip"
 PLUGIN_ROOT="$TMP_DIR/plugin"
+CALLER_CWD="$(pwd)"
 
 download_release_zip "$ZIP_PATH"
 extract_plugin_tree "$ZIP_PATH" "$PLUGIN_ROOT"
@@ -127,13 +128,14 @@ extract_plugin_tree "$ZIP_PATH" "$PLUGIN_ROOT"
 cd "$PLUGIN_ROOT"
 
 # No --dest → interactive wizard (uses /dev/tty so curl|bash still works).
+# Pass the caller's cwd so project detection is not the temp extract tree.
 if ! has_arg "--dest" "$@"; then
   if has_arg "--uninstall" "$@"; then
     usage
     echo "error: --uninstall requires --dest, or run with no args for the interactive wizard." >&2
     exit 1
   fi
-  exec python3 -m scripts.installer.interactive --zip "$ZIP_PATH"
+  exec python3 -m scripts.installer.interactive --zip "$ZIP_PATH" --cwd "$CALLER_CWD"
 fi
 
 BOOTSTRAP_ARGS=("$ZIP_PATH")

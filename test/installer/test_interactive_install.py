@@ -15,6 +15,7 @@ from scripts.installer.interactive import (
     WizardIO,
     collect_answers,
     detect_software_project,
+    open_console_io,
     run_wizard,
     verify_install,
 )
@@ -34,6 +35,55 @@ class TestDetectSoftwareProject(unittest.TestCase):
             ok, markers = detect_software_project(Path(dest))
             self.assertFalse(ok)
             self.assertEqual(markers, [])
+
+
+class TestOpenConsoleIO(unittest.TestCase):
+    def test_falls_back_to_stdio_when_dev_tty_unavailable(self):
+        real_open = open
+
+        def fake_open(path, *args, **kwargs):
+            if str(path) == "/dev/tty":
+                raise OSError(6, "No such device or address")
+            return real_open(path, *args, **kwargs)
+
+        stdin = mock.Mock()
+        stdin.isatty.return_value = True
+        stdout = mock.Mock()
+        stdout.isatty.return_value = True
+        with mock.patch("builtins.open", side_effect=fake_open), mock.patch.object(
+            interactive_mod.sys, "stdin", stdin
+        ), mock.patch.object(interactive_mod.sys, "stdout", stdout):
+            io_ = open_console_io()
+        self.assertIsNotNone(io_)
+        assert io_ is not None
+        self.assertIs(io_.stdin, stdin)
+        self.assertIs(io_.stdout, stdout)
+        self.assertFalse(io_.close_stdin)
+
+    def test_returns_none_when_no_tty_available(self):
+        real_open = open
+
+        def fake_open(path, *args, **kwargs):
+            if str(path) == "/dev/tty":
+                raise OSError(6, "No such device or address")
+            return real_open(path, *args, **kwargs)
+
+        stdin = mock.Mock()
+        stdin.isatty.return_value = False
+        stdout = mock.Mock()
+        stdout.isatty.return_value = False
+        with mock.patch("builtins.open", side_effect=fake_open), mock.patch.object(
+            interactive_mod.sys, "stdin", stdin
+        ), mock.patch.object(interactive_mod.sys, "stdout", stdout):
+            self.assertIsNone(open_console_io())
+
+    def test_no_tty_error_includes_suggested_dest(self):
+        with tempfile.TemporaryDirectory() as dest:
+            root = Path(dest)
+            (root / ".git").mkdir()
+            with mock.patch.object(interactive_mod, "open_console_io", return_value=None):
+                code = run_wizard(cwd=root)
+            self.assertEqual(code, 2)
 
 
 class TestCollectAnswers(unittest.TestCase):
