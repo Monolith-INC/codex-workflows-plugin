@@ -11,6 +11,18 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 _(nothing yet)_
 
+## [0.5.18] - 2026-07-31
+
+### Fixed
+- Cursor hook `ModuleNotFoundError: adapters`: enforce entrypoint puts `REPO_ROOT` and `scripts/` on `sys.path`; `hook_runtime` and related modules use bare packages under `scripts/` so Cursor/plugin spawns resolve imports.
+- Cursor `emit_decision` always emits allow JSON when `failClosed` is on (empty stdout was treated as a block).
+- Plugin MCP `agentic-orchestrator`: cwd-independent `scripts/orchestrator/run_mcp_server.py` launcher; `.mcp.json` invokes `${CLAUDE_PLUGIN_ROOT}/…/run_mcp_server.py` with `PYTHONPATH` / `ORCHESTRATOR_SKILLS_DIR` (no `python -m scripts.orchestrator.mcp_server` for host MCP).
+- Harness wiring: Cursor marketplace hooks via `hooks/hooks-cursor.json` + `.cursor-plugin` pointer; Codex project layer uses `.codex/hooks.json`; Gemini/Antigravity CLI hook timeout set to `5000` ms; project `.cursor/hooks.json` uses a relative hook command path.
+
+### Added
+- Tests for Cursor allow emission and MCP launcher from a foreign cwd; installer/runtime suite coverage updated (~232 passing).
+- Release packager now includes `.cursor-plugin/` and `.mcp.json` so Cursor/MCP harness metadata ships in the zip.
+
 ## [0.5.17] - 2026-07-31
 
 ### Changed

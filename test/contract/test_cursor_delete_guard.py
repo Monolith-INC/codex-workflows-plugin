@@ -1,11 +1,18 @@
 import io
 import os
+import sys
 import tempfile
 import unittest
 import contextlib
 from pathlib import Path
 
-from scripts.hook_runtime import run
+ROOT = Path(__file__).resolve().parents[2]
+SCRIPTS_DIR = ROOT / "scripts"
+for path in (ROOT, SCRIPTS_DIR):
+    if str(path) not in sys.path:
+        sys.path.insert(0, str(path))
+
+from scripts.hook_runtime import run  # noqa: E402
 
 
 class TestCursorDeleteGuard(unittest.TestCase):

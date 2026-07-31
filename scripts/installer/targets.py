@@ -29,7 +29,9 @@ def target_config_paths(target: str | Target) -> tuple[str, ...]:
     """Project-relative config paths written when --dest is given."""
     normalized = normalize_target(target)
     if normalized == Target.CODEX:
-        return ("hooks/hooks.json",)
+        # Codex project layer loads ``<project>/.codex/hooks.json`` (not repo-root
+        # ``hooks/hooks.json``, which remains the marketplace plugin default).
+        return (".codex/hooks.json",)
     if normalized == Target.GEMINI:
         return (".gemini/settings.json",)
     if normalized == Target.ANTIGRAVITY:

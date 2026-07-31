@@ -44,6 +44,7 @@ def _iter_release_files(repo_root: Path) -> Iterable[Path]:
     allow_dirs = [
         repo_root / ".codex-plugin",
         repo_root / ".claude-plugin",
+        repo_root / ".cursor-plugin",
         repo_root / "commands",
         repo_root / "hooks",
         repo_root / "skills",
@@ -53,6 +54,7 @@ def _iter_release_files(repo_root: Path) -> Iterable[Path]:
     allow_files = {
         repo_root / "README.md",
         repo_root / "install.sh",
+        repo_root / ".mcp.json",
         repo_root / "docs" / "roadmap.md",
         repo_root / "AI_Codex" / "README.md",
     }

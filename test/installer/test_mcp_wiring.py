@@ -50,7 +50,8 @@ class TestWireOrchestratorMcp(unittest.TestCase):
             payload = json.loads((project / ".mcp.json").read_text(encoding="utf-8"))
             server = payload["mcpServers"]["agentic-orchestrator"]
             self.assertEqual(server["command"], "python3")
-            self.assertEqual(server["args"], ["-m", "scripts.orchestrator.mcp_server"])
+            launcher = install_dir.resolve() / "scripts" / "orchestrator" / "run_mcp_server.py"
+            self.assertEqual(server["args"], [str(launcher)])
             self.assertEqual(server["env"]["PYTHONPATH"], str(install_dir.resolve()))
             self.assertEqual(
                 server["env"]["ORCHESTRATOR_SKILLS_DIR"],
@@ -160,7 +161,7 @@ class TestAzureEnvForwarding(unittest.TestCase):
                 "azure-devops": _azure_server(),
                 "agentic-orchestrator": {
                     "command": "python3",
-                    "args": ["-m", "scripts.orchestrator.mcp_server"],
+                    "args": ["/tmp/runtime/scripts/orchestrator/run_mcp_server.py"],
                     "env": {"PYTHONPATH": "/tmp/runtime"},
                 },
             }
@@ -172,6 +173,10 @@ class TestAzureEnvForwarding(unittest.TestCase):
             self.assertEqual(
                 cursor["mcpServers"]["agentic-orchestrator"]["env"]["PYTHONPATH"],
                 "/tmp/runtime",
+            )
+            self.assertEqual(
+                cursor["mcpServers"]["agentic-orchestrator"]["args"],
+                ["/tmp/runtime/scripts/orchestrator/run_mcp_server.py"],
             )
             non_interactive = _cursor_mcp_server_config(_azure_server(authentication="envvar"))
             self.assertNotIn("env", non_interactive)
@@ -196,12 +201,15 @@ class TestInstallMcpAcrossHarnesses(unittest.TestCase):
                 mcp = json.loads((project / ".mcp.json").read_text(encoding="utf-8"))
                 runtime = default_install_dir(project)
                 orchestrator = mcp["mcpServers"]["agentic-orchestrator"]
+                launcher = str(
+                    (runtime / "scripts" / "orchestrator" / "run_mcp_server.py").resolve()
+                )
                 shapes.append(
                     {
                         "target": target,
                         "servers": sorted(mcp["mcpServers"]),
                         "command": orchestrator["command"],
-                        "args": orchestrator["args"],
+                        "args_is_launcher": orchestrator["args"] == [launcher],
                         "env_keys": sorted(orchestrator["env"]),
                         "has_cursor_mcp": (project / ".cursor" / "mcp.json").exists(),
                         "has_home_mcp": (home / ".mcp.json").exists(),
@@ -236,6 +244,7 @@ class TestInstallMcpAcrossHarnesses(unittest.TestCase):
         )
         sample = comparable[0]
         self.assertEqual(sample["servers"], ["agentic-orchestrator", "azure-devops"])
+        self.assertTrue(sample["args_is_launcher"])
         self.assertEqual(sample["env_keys"], ["ORCHESTRATOR_SKILLS_DIR", "PYTHONPATH"])
         self.assertTrue(sample["has_cursor_mcp"])
         self.assertFalse(sample["has_home_mcp"])

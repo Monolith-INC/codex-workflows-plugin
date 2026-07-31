@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from scripts.policy.events import CanonicalToolEvent, PolicyDecision
+from policy.events import CanonicalToolEvent, PolicyDecision
 
 
 def parse_codex_payload(payload: dict[str, Any], *, project_root: str, vault_dir: str) -> CanonicalToolEvent:

@@ -31,7 +31,7 @@ class TestInstallerSmoke(unittest.TestCase):
             result = self._run_installer("codex", output_path)
 
             self.assertTrue(output_path.exists())
-            self.assertEqual(result["configPaths"], ["hooks/hooks.json"])
+            self.assertEqual(result["configPaths"], [".codex/hooks.json"])
             content = json.loads(output_path.read_text(encoding="utf-8"))
             self.assertEqual(
                 content["hooks"]["PreToolUse"][0]["hooks"][0]["command"],
@@ -155,7 +155,7 @@ class TestInstallerSmoke(unittest.TestCase):
 
     def test_install_with_dest_writes_codex_claude_and_cursor_configs(self):
         cases = [
-            ("codex", "hooks/hooks.json", ("hooks", "PreToolUse", 0, "hooks", 0, "command"), "codex_enforce_hook.py"),
+            ("codex", ".codex/hooks.json", ("hooks", "PreToolUse", 0, "hooks", 0, "command"), "codex_enforce_hook.py"),
             ("claude", ".claude/settings.json", ("hooks", "PreToolUse", 0, "hooks", 0, "command"), "claude_enforce_hook.py"),
             ("cursor", ".cursor/hooks.json", ("hooks", "preToolUse", 0, "command"), "cursor_enforce_hook.py"),
         ]

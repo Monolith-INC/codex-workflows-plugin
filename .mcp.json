@@ -9,7 +9,13 @@
     },
     "agentic-orchestrator": {
       "command": "python3",
-      "args": ["-m", "scripts.orchestrator.mcp_server"]
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/scripts/orchestrator/run_mcp_server.py"
+      ],
+      "env": {
+        "PYTHONPATH": "${CLAUDE_PLUGIN_ROOT}",
+        "ORCHESTRATOR_SKILLS_DIR": "${CLAUDE_PLUGIN_ROOT}/skills"
+      }
     }
   }
 }

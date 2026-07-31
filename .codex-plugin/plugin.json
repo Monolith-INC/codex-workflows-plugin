@@ -1,11 +1,12 @@
 {
   "name": "codex-workflows-plugin",
-  "version": "0.5.17",
+  "version": "0.5.18",
   "description": "Client-adaptive workflow and enforcement plugin for Codex-style agent hosts",
   "author": {
     "name": "agentrick"
   },
   "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "Codex Workflows",
     "shortDescription": "Workflow enforcement and session governance",

@@ -178,6 +178,7 @@ def install(
                 }
             }
         elif normalized_target == Target.GEMINI:
+            # Gemini CLI timeouts are milliseconds (docs: timeout 5000 == 5s).
             desired_hooks = {
                 "hooks": {
                     "BeforeTool": [
@@ -185,9 +186,10 @@ def install(
                             "matcher": "*",
                             "hooks": [
                                 {
+                                    "name": "codex-workflows-enforce",
                                     "type": "command",
                                     "command": hook_command,
-                                    "timeout": 5,
+                                    "timeout": 5000,
                                 }
                             ],
                         }
@@ -195,6 +197,7 @@ def install(
                 }
             }
         elif normalized_target == Target.ANTIGRAVITY_CLI:
+            # Antigravity CLI inherits Gemini-style BeforeTool hooks (ms timeout).
             desired_hooks = {
                 "hooks": {
                     "BeforeTool": [
@@ -202,9 +205,10 @@ def install(
                             "matcher": "*",
                             "hooks": [
                                 {
+                                    "name": "codex-workflows-enforce",
                                     "type": "command",
                                     "command": hook_command,
-                                    "timeout": 5,
+                                    "timeout": 5000,
                                 }
                             ],
                         }

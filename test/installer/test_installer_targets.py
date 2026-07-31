@@ -26,7 +26,7 @@ class TestInstallerTargets(unittest.TestCase):
         self.assertTrue(result.written_codex_config)
         self.assertTrue(result.written_shared_assets)
         self.assertTrue(result.written_target_config)
-        self.assertEqual(result.config_paths, ("hooks/hooks.json",))
+        self.assertEqual(result.config_paths, (".codex/hooks.json",))
         self.assertIsNotNone(result.merged_config)
         self.assertEqual(
             result.merged_config["hooks"]["PreToolUse"][0]["hooks"][0]["command"],

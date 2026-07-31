@@ -88,6 +88,29 @@ class TestMCPServer(unittest.TestCase):
         self.assertEqual(payload["output"]["skill"], "mock-skill")
         self.assertIn("prompt", payload["output"])
 
+    def test_run_mcp_server_launcher_works_from_foreign_cwd(self):
+        """Cursor spawns MCP without plugin root on PYTHONPATH/cwd; launcher must still import."""
+        import subprocess
+        import sys
+
+        launcher = Path(__file__).resolve().parent.parent / "scripts" / "orchestrator" / "run_mcp_server.py"
+        env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+        env["ORCHESTRATOR_SKILLS_DIR"] = str(self.skills_dir)
+        request = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}) + "\n"
+        proc = subprocess.run(
+            [sys.executable, str(launcher)],
+            input=request,
+            capture_output=True,
+            text=True,
+            cwd="/tmp",
+            env=env,
+            timeout=20,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertNotIn("ModuleNotFoundError", proc.stderr)
+        response = json.loads(proc.stdout.strip().splitlines()[0])
+        self.assertEqual(response["result"]["serverInfo"]["name"], "agentic-orchestrator")
+
 
 if __name__ == "__main__":
     unittest.main()

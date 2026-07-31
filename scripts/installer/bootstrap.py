@@ -109,12 +109,15 @@ def wire_orchestrator_mcp(install_dir: Path, project_dest: Path) -> bool:
             existing = {"mcpServers": {}}
 
     servers = existing.setdefault("mcpServers", {})
-    skills_dir = (install_dir / "skills").resolve()
+    install_root = install_dir.resolve()
+    skills_dir = (install_root / "skills")
+    launcher = install_root / "scripts" / "orchestrator" / "run_mcp_server.py"
     servers["agentic-orchestrator"] = {
         "command": "python3",
-        "args": ["-m", "scripts.orchestrator.mcp_server"],
+        "args": [str(launcher)],
         "env": {
-            "PYTHONPATH": str(install_dir.resolve()),
+            # Kept for hosts/tools that still import via ``python -m scripts…``.
+            "PYTHONPATH": str(install_root),
             "ORCHESTRATOR_SKILLS_DIR": str(skills_dir),
         },
     }

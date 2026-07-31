@@ -4,15 +4,15 @@ import os
 from pathlib import Path
 from typing import Any
 
-from scripts.artifact_profiles.resolution import resolution_profile
-from scripts.artifact_profiles.spec import spec_profile
-from scripts.artifact_reflection import ArtifactContext, ReflectionEngine, ReflectionState, load_mistakes
-from scripts.resolution_runtime import load_resolution_template, plan_resolution
-from scripts.policy.engine import validate_ticket_start
-from scripts.policy.events import CanonicalToolEvent
-from scripts.resolve_ticket_hook import on_resolve_ticket
-from scripts.spec_runtime import load_template, plan_spec_generation, slug_ticket_id
-from scripts.spec_start_hook import on_start_ticket
+from artifact_profiles.resolution import resolution_profile
+from artifact_profiles.spec import spec_profile
+from artifact_reflection import ArtifactContext, ReflectionEngine, ReflectionState, load_mistakes
+from resolution_runtime import load_resolution_template, plan_resolution
+from policy.engine import validate_ticket_start
+from policy.events import CanonicalToolEvent
+from resolve_ticket_hook import on_resolve_ticket
+from spec_runtime import load_template, plan_spec_generation, slug_ticket_id
+from spec_start_hook import on_start_ticket
 
 
 def _project_root() -> Path | None:

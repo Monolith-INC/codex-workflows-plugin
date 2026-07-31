@@ -1,9 +1,16 @@
-"""Backward-compatible shim — prefer scripts.artifact_reflection."""
+"""Backward-compatible shim — prefer artifact_reflection."""
 
 from __future__ import annotations
 
-from scripts.artifact_profiles.spec import SPEC_REQUIRED_HEADINGS, spec_profile
-from scripts.artifact_reflection import (
+import os
+import sys
+
+_SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
+if _SCRIPTS_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPTS_DIR)
+
+from artifact_profiles.spec import SPEC_REQUIRED_HEADINGS, spec_profile
+from artifact_reflection import (
     ReflectionState,
     advance_reflection,
     append_mistake as _append_mistake,
@@ -41,7 +48,7 @@ def critic_review(
     spec_kind: str,
     mistakes: list | None = None,
 ) -> list[str]:
-    from scripts.artifact_reflection import ArtifactContext
+    from artifact_reflection import ArtifactContext
 
     profile = spec_profile(spec_kind)
     context = ArtifactContext(
@@ -62,7 +69,7 @@ def actor_critic_loop(
     state: ReflectionState | None = None,
     max_attempts: int = 3,
 ) -> tuple[list[str], ReflectionState, bool]:
-    from scripts.artifact_reflection import ArtifactContext, ReflectionEngine
+    from artifact_reflection import ArtifactContext, ReflectionEngine
 
     engine = ReflectionEngine(spec_profile(spec_kind))
     context = ArtifactContext(
