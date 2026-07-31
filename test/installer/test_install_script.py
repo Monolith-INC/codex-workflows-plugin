@@ -71,6 +71,8 @@ Path(os.environ["CODEX_WORKFLOWS_TEST_ARGV_OUT"]).write_text(
         self.assertEqual(argv[0], "interactive")
         self.assertTrue(argv[1] == "--zip")
         self.assertTrue(argv[2].endswith(".zip"))
+        self.assertEqual(argv[3], "--cwd")
+        self.assertEqual(argv[4], str(REPO_ROOT))
         self.assertNotIn("--dest", result.stdout + result.stderr)
 
     def test_defaults_to_all_agents_when_no_target_is_supplied(self):

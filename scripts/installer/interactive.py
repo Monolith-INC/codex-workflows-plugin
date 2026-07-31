@@ -63,6 +63,7 @@ class WizardIO:
     stdin: TextIO
     stdout: TextIO
     ask: Callable[..., str] | None = None
+    close_stdin: bool = False
 
 
 def detect_software_project(path: Path) -> tuple[bool, list[str]]:
@@ -76,12 +77,29 @@ def detect_software_project(path: Path) -> tuple[bool, list[str]]:
 
 
 def open_console_io() -> WizardIO | None:
-    """Attach to the controlling terminal (needed for curl | bash)."""
+    """Attach to an interactive console for prompts.
+
+    Prefer ``/dev/tty`` so ``curl | bash`` can still prompt (stdin is the pipe).
+    Fall back to ``sys.stdin``/``sys.stdout`` when those are attached to a TTY
+    (IDE terminals or environments where ``/dev/tty`` is unavailable).
+    """
     try:
         tty = open("/dev/tty", "r+", encoding="utf-8", errors="replace")  # noqa: SIM115
     except OSError:
+        tty = None
+    if tty is not None:
+        return WizardIO(stdin=tty, stdout=tty, close_stdin=True)
+
+    stdin = sys.stdin
+    stdout = sys.stdout
+    if stdin is None or stdout is None:
         return None
-    return WizardIO(stdin=tty, stdout=tty)
+    try:
+        if stdin.isatty() and stdout.isatty():
+            return WizardIO(stdin=stdin, stdout=stdout, close_stdin=False)
+    except ValueError:
+        return None
+    return None
 
 
 def _print(io: WizardIO, message: str = "") -> None:
@@ -481,6 +499,23 @@ def remediation_loop(
         return 1
 
 
+def _no_tty_error(cwd: Path | None) -> int:
+    dest = (cwd or Path.cwd()).resolve()
+    print(
+        "error: no interactive terminal available.\n"
+        "Open a real terminal (or use an IDE terminal that allocates a TTY), or pass --dest:\n"
+        f"  curl -fsSL .../install.sh | bash -s -- --dest {dest}",
+        file=sys.stderr,
+    )
+    looks_like, markers = detect_software_project(dest)
+    if looks_like:
+        print(
+            f"note: {dest} looks like a software project ({', '.join(markers)}).",
+            file=sys.stderr,
+        )
+    return 2
+
+
 def run_wizard(
     *,
     zip_path: Path | None = None,
@@ -488,18 +523,12 @@ def run_wizard(
     cwd: Path | None = None,
     io: WizardIO | None = None,
 ) -> int:
-    owned_io = False
+    close_stdin = False
     if io is None:
         io = open_console_io()
-        owned_io = io is not None
         if io is None:
-            print(
-                "error: no interactive terminal available.\n"
-                "Re-run from a real terminal, or pass --dest for non-interactive install:\n"
-                "  curl -fsSL .../install.sh | bash -s -- --dest /path/to/project",
-                file=sys.stderr,
-            )
-            return 2
+            return _no_tty_error(cwd)
+        close_stdin = io.close_stdin
     try:
         answers = collect_answers(io, cwd=cwd)
         code = run_bootstrap(answers, zip_path=zip_path, install_dir=install_dir)
@@ -515,7 +544,7 @@ def run_wizard(
         _print(io, "\nCancelled.")
         return 130
     finally:
-        if owned_io and io is not None:
+        if close_stdin and io is not None:
             io.stdin.close()
 
 

@@ -11,6 +11,12 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 _(nothing yet)_
 
+## [0.5.16] - 2026-07-31
+
+### Fixed
+- Interactive `install.sh` preserves the caller's working directory after extracting the release tree, so project detection no longer targets the temp plugin extract.
+- Wizard falls back to stdin/stdout when those are TTYs and `/dev/tty` is unavailable; no-TTY errors suggest a concrete `--dest` path.
+
 ## [0.5.15] - 2026-07-31
 
 ### Added
