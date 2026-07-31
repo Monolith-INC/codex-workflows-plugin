@@ -13,11 +13,11 @@ usage() {
   cat <<'EOF'
 Install codex-workflows-plugin into a project (local install only).
 
-Usage:
-  install.sh --dest /path/to/project [bootstrap args]
+Interactive (recommended):
+  curl -fsSL https://github.com/theocarranza/codex-workflows-plugin/releases/latest/download/install.sh | bash
 
-Examples:
-  curl -fsSL https://github.com/theocarranza/codex-workflows-plugin/releases/latest/download/install.sh | bash -s -- --dest /path/to/project
+Non-interactive / CI:
+  curl -fsSL .../install.sh | bash -s -- --dest /path/to/project
   curl -fsSL .../install.sh | bash -s -- --dest /path/to/project --target claude
   curl -fsSL .../install.sh | bash -s -- --dest /path/to/project --uninstall
 
@@ -90,23 +90,24 @@ urllib.request.urlretrieve(download_url, output)
 PY
 }
 
-extract_bootstrap() {
+extract_plugin_tree() {
   local zip_path="$1"
-  local output="$2"
-  python3 - "$zip_path" "$output" <<'PY'
+  local output_dir="$2"
+  python3 - "$zip_path" "$output_dir" <<'PY'
 from __future__ import annotations
 
 import sys
 import zipfile
 from pathlib import Path
 
-zip_path, output = sys.argv[1:3]
+zip_path, output_dir = sys.argv[1:3]
+destination = Path(output_dir)
+destination.mkdir(parents=True, exist_ok=True)
 with zipfile.ZipFile(zip_path) as archive:
-    try:
-        data = archive.read("scripts/installer/bootstrap.py")
-    except KeyError as exc:
-        raise SystemExit("Release zip does not contain scripts/installer/bootstrap.py") from exc
-Path(output).write_bytes(data)
+    archive.extractall(destination)
+required = destination / "scripts" / "installer" / "bootstrap.py"
+if not required.is_file():
+    raise SystemExit("Release zip does not contain scripts/installer/bootstrap.py")
 PY
 }
 
@@ -115,17 +116,25 @@ if has_arg "--help" "$@" || has_arg "-h" "$@"; then
   exit 0
 fi
 
-if ! has_arg "--dest" "$@"; then
-  usage
-  echo "error: --dest PROJECT is required (local/project install only)." >&2
-  exit 1
-fi
-
 ZIP_PATH="$TMP_DIR/codex-workflows-plugin.zip"
-BOOTSTRAP_PATH="$TMP_DIR/bootstrap.py"
+PLUGIN_ROOT="$TMP_DIR/plugin"
 
 download_release_zip "$ZIP_PATH"
-extract_bootstrap "$ZIP_PATH" "$BOOTSTRAP_PATH"
+extract_plugin_tree "$ZIP_PATH" "$PLUGIN_ROOT"
+
+# Run from the extracted tree so -m scripts... resolves package modules from the
+# release (not whatever happens to be in the caller's cwd).
+cd "$PLUGIN_ROOT"
+
+# No --dest → interactive wizard (uses /dev/tty so curl|bash still works).
+if ! has_arg "--dest" "$@"; then
+  if has_arg "--uninstall" "$@"; then
+    usage
+    echo "error: --uninstall requires --dest, or run with no args for the interactive wizard." >&2
+    exit 1
+  fi
+  exec python3 -m scripts.installer.interactive --zip "$ZIP_PATH"
+fi
 
 BOOTSTRAP_ARGS=("$ZIP_PATH")
 if ! has_arg "--target" "$@" && ! has_arg "--uninstall" "$@"; then
@@ -133,4 +142,4 @@ if ! has_arg "--target" "$@" && ! has_arg "--uninstall" "$@"; then
 fi
 BOOTSTRAP_ARGS+=("$@")
 
-python3 "$BOOTSTRAP_PATH" "${BOOTSTRAP_ARGS[@]}"
+exec python3 -m scripts.installer.bootstrap "${BOOTSTRAP_ARGS[@]}"

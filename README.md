@@ -143,7 +143,15 @@ The plugin installs a `PreToolUse` / `BeforeTool` hook that intercepts every age
 
 ### One-step local install
 
-Install is **project-only**. `--dest` is required. There is no global/`$HOME` install.
+Install is **project-only**. There is no global/`$HOME` install.
+
+Interactive (recommended) — no arguments required. The installer opens a step-by-step wizard on your terminal (`/dev/tty`, so `curl | bash` still works), detects whether the current folder looks like a software project, asks for destination/target, installs, then runs post-install path checks and offers to re-run failed wiring steps:
+
+```bash
+curl -fsSL https://github.com/theocarranza/codex-workflows-plugin/releases/latest/download/install.sh | bash
+```
+
+Non-interactive / CI (flags still supported):
 
 ```bash
 curl -fsSL https://github.com/theocarranza/codex-workflows-plugin/releases/latest/download/install.sh \
@@ -155,19 +163,9 @@ For private repository access, download the installer with authenticated `gh` fi
 ```bash
 tmp=$(mktemp -d)
 gh release download v0.5.7 -R theocarranza/codex-workflows-plugin -p install.sh -D "$tmp"
-bash "$tmp/install.sh" --dest /path/to/your/project
+bash "$tmp/install.sh"   # interactive
+# or: bash "$tmp/install.sh" --dest /path/to/your/project
 ```
-
-No additional Python dependencies are needed — the plugin uses only the standard library.
-
-Bootstrap does the following under `--dest`:
-
-1. **Installs the runtime** to `<dest>/.codex-workflows/` (hook commands reference this path).
-2. **Wires project hook configs** (for example `.claude/settings.json`, `.cursor/hooks.json`, `.agents/hooks.json`).
-3. **Syncs discovery trees**: Claude skills/commands under `.claude/skills/` and `.claude/commands/`; Antigravity skills under `.agents/skills/`; workflows/rules under `.agent/`.
-4. **Merges** an `agentic-orchestrator` MCP entry into the project's `.mcp.json`, mirrors servers into `.codex/config.toml` and `.cursor/mcp.json`, and enables project MCP servers in `.claude/settings.local.json`.
-
-> **After bootstrapping, restart your agent session in that project** so hooks and skills reload.
 
 ### Advanced install options
 
