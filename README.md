@@ -39,6 +39,7 @@ skills/                   # Skill folders + manifest.json for orchestrator MCP d
 |---|---|
 | `feature-implementation` | Start an Active Feature: plan + start-stage stacked Feature/Story branches (Story→Feature). Mid-stack sync → `reconcile-feature-stack`; closeout → `finish-feature-development`. |
 | `reconcile-feature-stack` | Propagate ancestor Feature/Story commits through descendant Story branches in stack order. |
+| `finish-feature-development` | Close an Active Feature stack with Feature→trunk PR after Stories merge into Feature. |
 | `start-ticket` | Validates and activates a ticket from `Ready/` to `Active/`, enforcing git safety and YouTrack state. |
 | `resolve-ticket` | Actor-Critic resolution report grounded on specs, then archive; enforces YouTrack timer stop and spent time. |
 | `commit-prep` | Guides atomic commits following conventional-commit conventions. |
