@@ -1,6 +1,6 @@
 {
   "name": "codex-workflows-plugin",
-  "version": "0.5.15",
+  "version": "0.5.16",
   "description": "Client-adaptive workflow and enforcement plugin for Codex-style agent hosts",
   "author": {
     "name": "agentrick"
