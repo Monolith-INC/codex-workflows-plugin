@@ -14,7 +14,7 @@ usage() {
 Install codex-workflows-plugin into a project (local install only).
 
 Interactive (recommended):
-  curl -fsSL https://github.com/theocarranza/codex-workflows-plugin/releases/latest/download/install.sh | bash
+  bash <(curl -fsSL https://github.com/theocarranza/codex-workflows-plugin/releases/latest/download/install.sh)
 
 Non-interactive / CI:
   curl -fsSL .../install.sh | bash -s -- --dest /path/to/project
@@ -127,7 +127,7 @@ extract_plugin_tree "$ZIP_PATH" "$PLUGIN_ROOT"
 # release (not whatever happens to be in the caller's cwd).
 cd "$PLUGIN_ROOT"
 
-# No --dest → interactive wizard (uses /dev/tty so curl|bash still works).
+# No --dest → interactive wizard (prefer: bash <(curl ...); keeps a TTY for prompts).
 # Pass the caller's cwd so project detection is not the temp extract tree.
 if ! has_arg "--dest" "$@"; then
   if has_arg "--uninstall" "$@"; then
