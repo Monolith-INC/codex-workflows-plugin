@@ -145,10 +145,10 @@ The plugin installs a `PreToolUse` / `BeforeTool` hook that intercepts every age
 
 Install is **project-only**. There is no global/`$HOME` install.
 
-Interactive (recommended) — no arguments required. The installer opens a step-by-step wizard on your terminal (`/dev/tty`, so `curl | bash` still works), detects whether the current folder looks like a software project, asks for destination/target, installs, then runs post-install path checks and offers to re-run failed wiring steps:
+Interactive (recommended) — no arguments required. Use process substitution so bash keeps your terminal for prompts (plain `curl | bash` feeds the script on stdin and can fail with "no interactive terminal"). The wizard detects whether the current folder looks like a software project, asks for destination/target, installs, then runs post-install path checks and offers to re-run failed wiring steps:
 
 ```bash
-curl -fsSL https://github.com/theocarranza/codex-workflows-plugin/releases/latest/download/install.sh | bash
+bash <(curl -fsSL https://github.com/theocarranza/codex-workflows-plugin/releases/latest/download/install.sh)
 ```
 
 Non-interactive / CI (flags still supported):
