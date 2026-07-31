@@ -22,8 +22,23 @@ from pathlib import Path
 
 Path(os.environ["CODEX_WORKFLOWS_TEST_ARGV_OUT"]).write_text("\\n".join(sys.argv[1:]), encoding="utf-8")
 """
+        interactive = """
+from __future__ import annotations
+
+import os
+import sys
+from pathlib import Path
+
+Path(os.environ["CODEX_WORKFLOWS_TEST_ARGV_OUT"]).write_text(
+    "interactive\\n" + "\\n".join(sys.argv[1:]),
+    encoding="utf-8",
+)
+"""
         with zipfile.ZipFile(zip_path, "w") as archive:
+            archive.writestr("scripts/__init__.py", "")
+            archive.writestr("scripts/installer/__init__.py", "")
             archive.writestr("scripts/installer/bootstrap.py", bootstrap)
+            archive.writestr("scripts/installer/interactive.py", interactive)
         return zip_path
 
     def _run_install_script(self, *args: str, expect_success: bool = True) -> tuple[list[str] | None, subprocess.CompletedProcess[str]]:
@@ -50,10 +65,13 @@ Path(os.environ["CODEX_WORKFLOWS_TEST_ARGV_OUT"]).write_text("\\n".join(sys.argv
                 return argv_path.read_text(encoding="utf-8").splitlines(), result
             return None, result
 
-    def test_requires_dest(self):
-        _, result = self._run_install_script(expect_success=False)
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("--dest", result.stdout + result.stderr)
+    def test_no_dest_launches_interactive_module(self):
+        argv, result = self._run_install_script()
+        self.assertIsNotNone(argv)
+        self.assertEqual(argv[0], "interactive")
+        self.assertTrue(argv[1] == "--zip")
+        self.assertTrue(argv[2].endswith(".zip"))
+        self.assertNotIn("--dest", result.stdout + result.stderr)
 
     def test_defaults_to_all_agents_when_no_target_is_supplied(self):
         argv, _ = self._run_install_script("--dest", "/tmp/project")
