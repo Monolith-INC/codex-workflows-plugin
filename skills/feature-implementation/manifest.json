@@ -1,13 +1,13 @@
 {
   "name": "feature-implementation",
-  "version": "1.0.0",
-  "description": "Plan and implement an Active Feature with stacked Feature and User Story branches.",
+  "version": "1.1.0",
+  "description": "Start an Active Feature: Phase 0–4 plan plus start-stage stacked Feature/Story branches. Mid-stack sync → reconcile-feature-stack; closeout → finish-feature-development.",
   "input_schema": {
     "type": "object",
     "properties": {
       "feature_id": {
         "type": "string",
-        "description": "Feature identifier (Azure DevOps ID, vault path, or name)."
+        "description": "Feature identifier (Azure DevOps ID, vault path, GitHub issue, or name)."
       }
     },
     "required": ["feature_id"]
@@ -21,5 +21,12 @@
       "mode": { "type": "string" }
     }
   },
-  "tools": []
+  "tools": [],
+  "stage": {
+    "name": "start-feature-development",
+    "workflow": "skills/codex_workflows/resources/workflows-start-feature-development.md",
+    "rules": "skills/codex_workflows/rules/rules-start-feature-development.ts",
+    "installed_workflow": ".agent/workflows/workflows-start-feature-development.md",
+    "installed_rules": ".agent/rules/rules-start-feature-development.ts"
+  }
 }

@@ -12,7 +12,7 @@ from scripts.installer.bootstrap import (
     install_from_source,
     install_from_zip,
 )
-from scripts.installer.cli import sync_host_discovery_assets
+from scripts.installer.cli import sync_host_discovery_assets, sync_shared_assets
 
 
 PLUGIN_ROOT = Path(__file__).parent.parent.parent
@@ -92,6 +92,26 @@ class TestSyncHostDiscoveryAssets(unittest.TestCase):
             self.assertTrue((dest / ".claude" / "skills" / "demo-skill" / "SKILL.md").exists())
             self.assertTrue((dest / ".agents" / "skills" / "demo-skill" / "SKILL.md").exists())
             self.assertTrue((dest / ".claude" / "commands" / "demo.md").exists())
+
+
+class TestSyncSharedAssets(unittest.TestCase):
+    def test_syncs_markdown_and_typescript_rules(self):
+        with tempfile.TemporaryDirectory() as plugin, tempfile.TemporaryDirectory() as project:
+            root = Path(plugin)
+            rules = root / ".agent" / "rules"
+            workflows = root / ".agent" / "workflows"
+            rules.mkdir(parents=True)
+            workflows.mkdir(parents=True)
+            (rules / "rules-demo.md").write_text("# md\n", encoding="utf-8")
+            (rules / "rules-demo.ts").write_text("export const rules = [] as const;\n", encoding="utf-8")
+            (workflows / "workflows-demo.md").write_text("# wf\n", encoding="utf-8")
+
+            dest = Path(project)
+            sync_shared_assets(dest, root)
+
+            self.assertTrue((dest / ".agent" / "rules" / "rules-demo.md").exists())
+            self.assertTrue((dest / ".agent" / "rules" / "rules-demo.ts").exists())
+            self.assertTrue((dest / ".agent" / "workflows" / "workflows-demo.md").exists())
 
 
 class TestInstallFromZip(unittest.TestCase):
