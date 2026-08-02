@@ -5,8 +5,8 @@ Exact `gh` / `gh api` calls for the `review-pr` skill when
 Load this file at the start of INGEST and ACT (GitHub path).
 
 Requires authenticated `gh` (`gh auth status` must succeed). Owner/repo
-come from `scm-provider.json` (`owner`, `repo`) or from `gh` repo
-resolution in the working tree.
+**always** come from `.codex-workflows/scm-provider.json` (`owner`, `repo`).
+Do not fall back to cwd remote resolution.
 
 ## Infer branch from git
 
@@ -15,13 +15,13 @@ git branch --show-current
 # e.g. feature/auth-token-fix
 ```
 
-Repo identity for API paths: use `owner` / `repo` from
-`.codex-workflows/scm-provider.json`.
+Repo identity for every `gh` / `gh api` call: `-R <owner>/<repo>` or
+`repos/<owner>/<repo>/...` using settings values.
 
 ## INGEST — Fetch PR metadata
 
 ```bash
-gh pr view <PR-number> --json title,body,baseRefName,author,headRefName
+gh pr view <PR-number> -R <owner>/<repo> --json title,body,baseRefName,author,headRefName
 ```
 
 Extract: `title`, `body` (description), `baseRefName` (target branch),
@@ -75,15 +75,19 @@ Map each thread node to ReviewThread:
 separately. Process all other threads.
 
 If GraphQL fails, fall back to REST review comments (no reliable resolve
-flag — treat all as active and note the limitation in INGEST summary):
+flag — treat kept roots as active and note the limitation in INGEST summary):
 
 ```bash
 gh api repos/<owner>/<repo>/pulls/<PR-number>/comments --paginate
 ```
 
-Map REST items: `id` → `thread_id`, `path` → `file`, `line`/`original_line`
-→ `line`, `body` → `comment_text`, `user.login` → `reviewer`,
-`status` → `active`.
+**Root-only filter (required):** keep only comments where `in_reply_to_id`
+is null/absent. Drop replies. Each remaining root is one ReviewThread;
+`thread_id` = that comment's `id` (same id used later for `in_reply_to`).
+
+Map REST root items: `id` → `thread_id`, `path` → `file`,
+`line`/`original_line` → `line`, `body` → `comment_text`,
+`user.login` → `reviewer`, `status` → `active`.
 
 General PR conversation comments (issue comments) are out of scope for
 file-anchored review classification unless they are the only feedback;
@@ -92,7 +96,7 @@ prefer review threads.
 ## INGEST — Fetch PR diff / changed files
 
 ```bash
-gh pr diff <PR-number> --name-only
+gh pr diff <PR-number> -R <owner>/<repo> --name-only
 ```
 
 Store the list of changed file paths. During CLASSIFY, read file content
@@ -101,7 +105,7 @@ from the working tree with `Read(<file-path>)`.
 Optional full diff (when needed for context):
 
 ```bash
-gh pr diff <PR-number>
+gh pr diff <PR-number> -R <owner>/<repo>
 ```
 
 If `--name-only` fails, log a warning and continue — CLASSIFY notes
@@ -117,7 +121,7 @@ gh api repos/<owner>/<repo>/pulls/<PR-number>/comments \
   -F in_reply_to=<thread_id>
 ```
 
-`thread_id` is the root comment `databaseId` captured at INGEST.
+`thread_id` is the root comment `databaseId` / REST `id` captured at INGEST.
 
 **CRITICAL:** Do NOT call any endpoint that resolves or dismisses a
 review thread (for example GraphQL `resolveReviewThread`, or UI
@@ -126,6 +130,8 @@ review thread (for example GraphQL `resolveReviewThread`, or UI
 ## Known gotchas
 
 - `gh` must be authenticated for the repo's host (`gh auth status`).
+- Always pass `-R <owner>/<repo>` (or path segments from settings) so
+  overrides/forks/multi-remote checkouts cannot mix repos.
 - `line` may be null on outdated or multi-line comments — display as
   `[general]` when both `file` and `line` are missing; if `file` exists
   without `line`, show `<file>` without a line number.
@@ -133,5 +139,5 @@ review thread (for example GraphQL `resolveReviewThread`, or UI
   needed later, extend; for this pass, 100 threads is the documented cap.
 - REST `in_reply_to` must reference a **pull review comment** id, not an
   issue comment id.
-- Owner/repo in API paths must match `scm-provider.json`; do not invent
-  a different remote.
+- REST fallback without root filtering will classify replies as threads —
+  never skip the `in_reply_to_id` null check.

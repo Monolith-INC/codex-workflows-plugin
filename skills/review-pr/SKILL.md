@@ -73,10 +73,14 @@ git remote get-url origin
 
 Parse `owner` / `repo` from the URL:
 
-- GitHub HTTPS/SSH: `owner` = path segment before repo; `repo` = last segment
-  with `.git` stripped.
-- Azure DevOps: `repo` = last path segment (`.git` stripped); `owner` = the
-  Azure project segment when present, otherwise the org segment.
+- GitHub HTTPS/SSH (`github.com/org/repo.git` or `git@github.com:org/repo.git`):
+  `owner` = org/user segment; `repo` = last segment with `.git` stripped.
+- Azure DevOps HTTPS (`dev.azure.com/{org}/{project}/_git/{repo}`):
+  `owner` = `{project}`; `repo` = last segment with `.git` stripped.
+- Azure DevOps SSH (`ssh.dev.azure.com:v3/{org}/{project}/{repo}`):
+  `owner` = `{project}`; `repo` = last segment with `.git` stripped.
+- Azure legacy (`{org}.visualstudio.com/...`): same rule — `owner` =
+  project segment when present; `repo` = last path segment.
 
 Create `<project-root>/.codex-workflows/` if needed. Write:
 
@@ -145,13 +149,13 @@ git branch --show-current
 
 ### When `provider` is `github`
 
-1. Run `gh pr view <n> --json title,body,baseRefName,author,headRefName`
-   per `github-pr-mechanics.md`. Target branch = `baseRefName`.
+1. Run `gh pr view <n> -R <owner>/<repo> --json title,body,baseRefName,author,headRefName`
+   per `github-pr-mechanics.md` (owner/repo from settings). Target branch = `baseRefName`.
 2. On failure, STOP: `"INGEST failed — could not fetch PR #<n>: <error>"`.
 3. Fetch review threads via GraphQL (preferred) or REST fallback; skip
    resolved/outdated; map fields per `github-pr-mechanics.md`.
-4. Run `gh pr diff <n> --name-only` for changed paths. On failure, warn
-   and continue.
+4. Run `gh pr diff <n> -R <owner>/<repo> --name-only` for changed paths.
+   On failure, warn and continue.
 5. For file context later, use `Read(<file-path>)` on the working tree.
 
 ### INGEST summary (all providers)
