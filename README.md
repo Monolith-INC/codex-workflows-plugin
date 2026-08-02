@@ -47,7 +47,7 @@ skills/                   # Skill folders + manifest.json for orchestrator MCP d
 | `repository-sync` | Rebases the current branch onto the latest `origin/<base>`. |
 | `bootstrap` | One-time plugin install and host wiring. |
 | `write-spec` | Actor-Critic spec generation (RFC, ADR, design doc, tech spec, SRS, etc.) under `<vault>/Specs/`. Triggered by `/start-ticket` when specs are missing. |
-| `review-pr` | Retrieves Azure DevOps PR review threads, classifies each as comply or reject, presents a report for user confirmation, applies code edits for comply items, and posts rejection replies to threads (status never mutated). |
+| `review-pr` | First run writes project-local `.codex-workflows/scm-provider.json` (`github` or `azure_devops`). Retrieves PR review threads (GitHub via `gh`, Azure via MCP), classifies each as comply or reject, presents a report for confirmation, applies comply edits, and posts rejection replies (thread status never mutated). |
 | `codex_workflows` | Core hook enforcement script — not invoked directly. |
 
 Slash commands live in `commands/` and are registered into the Claude plugin cache alongside skills. Invoke in Claude Code as `/start-ticket`, `/review-pr <n>`, etc.

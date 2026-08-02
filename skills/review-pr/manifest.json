@@ -1,7 +1,7 @@
 {
   "name": "review-pr",
-  "version": "1.0.0",
-  "description": "Retrieve Azure DevOps pull request review threads, classify each as comply or reject, present a consolidated report for user confirmation, apply code edits, and post replies.",
+  "version": "1.1.0",
+  "description": "Retrieve GitHub or Azure DevOps PR review threads, classify each as comply or reject, present a consolidated report for user confirmation, apply code edits, and post replies. First run configures project-local .codex-workflows/scm-provider.json.",
   "input_schema": {
     "type": "object",
     "properties": {

@@ -7,7 +7,7 @@ Templates for PRESENT and PERSIST phases. Load this file at the start of each ph
 ```
 PR #<n> — "<title>"
 Branch: <branch> → <target>
-<N> threads fetched · <S> skipped (resolved/won't fix) · <A> active
+<N> threads fetched · <S> skipped (resolved / won't fix / outdated) · <A> active
 
 ════════════════════════════════════════════════════════════
 COMPLY (<comply-count>)
@@ -76,7 +76,8 @@ Outcome: complete | partial
 date: YYYY-MM-DD
 type: report
 pr: <number>
-repo: <repo-name inferred from git remote>
+repo: <repo from scm-provider.json>
+scm_provider: github | azure_devops
 branch: <active branch>
 outcome: complete | partial
 ---
