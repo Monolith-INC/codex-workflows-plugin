@@ -1,6 +1,6 @@
 # review-pr Dual SCM Provider Implementation Plan
 
-> **For agentic workers:** Implement task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** Implement task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Extend `review-pr` with PHASE 0 SETUP writing project-local `.codex-workflows/scm-provider.json`, and GitHub `gh` transport alongside existing Azure DevOps MCP.
 
@@ -35,8 +35,8 @@
 **Files:**
 - Create: `skills/review-pr/references/github-pr-mechanics.md`
 
-- [ ] Write exact INGEST/ACT `gh` commands, thread mapping, skip rules, gotchas
-- [ ] Commit
+- [x] Write exact INGEST/ACT `gh` commands, thread mapping, skip rules, gotchas
+- [x] Commit
 
 ### Task 2: SKILL.md + manifest + command
 
@@ -46,15 +46,15 @@
 - Modify: `commands/review-pr.md`
 - Modify: `skills/review-pr/references/report-format.md`
 
-- [ ] Add PHASE 0 SETUP; branch INGEST/ACT on `provider`
-- [ ] Keep CLASSIFY/PRESENT/PERSIST; widen thread_id notes
-- [ ] Update command + manifest descriptions; report-format `scm_provider`
-- [ ] Commit
+- [x] Add PHASE 0 SETUP; branch INGEST/ACT on `provider`
+- [x] Keep CLASSIFY/PRESENT/PERSIST; widen thread_id notes
+- [x] Update command + manifest descriptions; report-format `scm_provider`
+- [x] Commit
 
 ### Task 3: CHANGELOG
 
 **Files:**
 - Modify: `CHANGELOG.md`
 
-- [ ] Document dual-provider + `scm-provider.json`
-- [ ] Commit
+- [x] Document dual-provider + `scm-provider.json`
+- [x] Commit

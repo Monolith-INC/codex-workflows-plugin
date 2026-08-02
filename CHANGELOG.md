@@ -9,7 +9,18 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-_(nothing yet)_
+### Added
+- `review-pr` dual SCM support: first-run SETUP writes project-local
+  `.codex-workflows/scm-provider.json` (`github` | `azure_devops`) from
+  `origin`; GitHub path uses `gh` / `gh api` (`github-pr-mechanics.md`);
+  Azure DevOps MCP path unchanged.
+- Design + plan: `docs/superpowers/specs/2026-08-02-review-pr-scm-provider-design.md`,
+  `docs/superpowers/plans/2026-08-02-review-pr-scm-provider.md`.
+
+### Changed
+- `review-pr` skill, command, and manifest describe dual providers; vault
+  report frontmatter may include `scm_provider`.
+
 
 ## [0.5.19] - 2026-07-31
 
