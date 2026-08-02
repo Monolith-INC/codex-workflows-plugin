@@ -2,7 +2,7 @@
 
 A portable, multi-host workspace automation plugin that enforces session bootstrapping, ticket lifecycle governance, YouTrack state gating, and git safety checks across agent-driven development workflows.
 
-> **v0.5.19** — Staged feature-development skills (`feature-implementation` start, `reconcile-feature-stack`, `finish-feature-development`) with paired workflows/TypeScript rules for stacked Feature→Story delivery; installer syncs `.ts` rules.
+> **v0.5.20** — `review-pr` dual SCM providers (GitHub via `gh`, Azure DevOps via MCP) with project-local `.codex-workflows/scm-provider.json` first-run SETUP.
 
 ## Purpose
 
