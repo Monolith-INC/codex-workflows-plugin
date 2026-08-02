@@ -76,7 +76,8 @@ Outcome: complete | partial
 date: YYYY-MM-DD
 type: report
 pr: <number>
-repo: <repo-name inferred from git remote>
+repo: <repo from scm-provider.json>
+scm_provider: github | azure_devops
 branch: <active branch>
 outcome: complete | partial
 ---

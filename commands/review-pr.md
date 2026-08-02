@@ -1,8 +1,9 @@
 ---
 name: review-pr
 description: >
-  Classify Azure DevOps PR review threads, present a report for confirmation,
-  apply comply edits, post rejection replies, and persist results to AI_Codex.
+  Classify GitHub or Azure DevOps PR review threads, present a report for
+  confirmation, apply comply edits, post rejection replies, and persist
+  results to AI_Codex. First run writes .codex-workflows/scm-provider.json.
   Invoke with a PR number: /review-pr <number>.
 disable-model-invocation: true
 allowed-tools: >
@@ -15,6 +16,8 @@ allowed-tools: >
 
 # review-pr
 
-Classify Azure DevOps PR review threads and act on the results.
+Classify PR review threads (GitHub via `gh`, or Azure DevOps via MCP) and
+act on the results.
 
-Follow the full workflow in `skills/review-pr/SKILL.md`. Load reference files from `skills/review-pr/references/` as each phase requires them.
+Follow the full workflow in `skills/review-pr/SKILL.md`. Load reference
+files from `skills/review-pr/references/` as each phase requires them.

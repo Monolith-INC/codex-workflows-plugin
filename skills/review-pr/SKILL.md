@@ -1,12 +1,13 @@
 ---
 name: review-pr
 description: >
-  Retrieve Azure DevOps pull request review threads, classify each as comply or
-  reject, present a consolidated report for user confirmation, apply code edits
-  for comply items, post rejection replies to Azure threads (without changing
-  thread status), and persist results to the AI Codex vault.
+  Retrieve pull request review threads (GitHub via gh, or Azure DevOps via MCP),
+  classify each as comply or reject, present a consolidated report for user
+  confirmation, apply code edits for comply items, post rejection replies
+  without changing thread status, and persist results to the AI Codex vault.
+  First run writes project-local .codex-workflows/scm-provider.json from origin.
   Invoke with a PR number: /review-pr <number>.
-  Repo and branch are always inferred from git remote origin and active branch.
+  Repo and branch are inferred from scm-provider settings and the active branch.
 disable-model-invocation: true
 allowed-tools: >
   Read Write Edit Glob Grep Bash
@@ -18,63 +19,144 @@ allowed-tools: >
 
 # review-pr
 
-Classify Azure DevOps PR review threads and act on the results. Load reference files as each phase needs them.
+Classify PR review threads and act on the results. Provider is selected from
+project-local SCM settings. Load reference files as each phase needs them.
 
 References (in `references/`):
-- `azure-pr-mechanics.md` — exact MCP tool names, parameters, and gotchas.
+- `azure-pr-mechanics.md` — Azure DevOps MCP calls and gotchas.
+- `github-pr-mechanics.md` — GitHub `gh` / `gh api` calls and gotchas.
 - `report-format.md` — terminal output template and vault note template.
+
+---
+
+## PHASE 0 — SETUP
+
+Runs before INGEST on every invocation.
+
+**Input:** PR number passed as the skill argument (e.g. `42`). If multiple
+numbers given, process only the first and warn:
+`"review-pr processes one PR per invocation."`.
+
+**1. Resolve project root:**
+
+```bash
+git rev-parse --show-toplevel
+```
+
+Settings path (project-only — never `$HOME` or plugin cache):
+
+```text
+<project-root>/.codex-workflows/scm-provider.json
+```
+
+**2. If the settings file exists:**
+
+Read and validate required fields: `provider`, `owner`, `repo`.
+`provider` must be `github` or `azure_devops`.
+
+If invalid, STOP with repair guidance (fix or delete the file and re-run).
+Do **not** re-detect from remotes while a valid file exists.
+
+**3. If the settings file is missing:**
+
+Detect from `origin` only:
+
+```bash
+git remote get-url origin
+```
+
+| Remote pattern | `provider` |
+|---|---|
+| host contains `github.com` | `github` |
+| host contains `dev.azure.com`, `visualstudio.com`, or `ssh.dev.azure.com` | `azure_devops` |
+| anything else | STOP — unsupported remote; do not guess |
+
+Parse `owner` / `repo` from the URL:
+
+- GitHub HTTPS/SSH: `owner` = path segment before repo; `repo` = last segment
+  with `.git` stripped.
+- Azure DevOps: `repo` = last path segment (`.git` stripped); `owner` = the
+  Azure project segment when present, otherwise the org segment.
+
+Create `<project-root>/.codex-workflows/` if needed. Write:
+
+```json
+{
+  "provider": "<github|azure_devops>",
+  "detectedFrom": "origin",
+  "owner": "<org-or-user>",
+  "repo": "<repo-name>",
+  "configuredAt": "<YYYY-MM-DD>"
+}
+```
+
+Print:
+
+```text
+SETUP — configured scm-provider: <provider> (<owner>/<repo>) → .codex-workflows/scm-provider.json
+```
+
+**4. Load mechanics reference for INGEST/ACT:**
+
+- `github` → read `references/github-pr-mechanics.md`
+- `azure_devops` → read `references/azure-pr-mechanics.md`
+
+Then proceed to PHASE 1.
 
 ---
 
 ## PHASE 1 — INGEST
 
-Read `references/azure-pr-mechanics.md` before making any MCP calls.
+Follow the loaded mechanics reference. Normalize every active thread into a
+ReviewThread:
 
-**Input:** PR number passed as the skill argument (e.g. `42`). If multiple numbers given, process only the first and warn: `"review-pr processes one PR per invocation."`.
+```text
+{
+  thread_id:    string | int
+  file:         string | null
+  line:         int | null
+  reviewer:     string
+  comment_text: string
+  status:       string
+  reaction:     "comply" | "reject"   // set in CLASSIFY
+  reason:       string | null
+  action:       string | null
+}
+```
 
-**1. Infer repo and branch from git:**
+Also record active branch:
 
 ```bash
-git remote get-url origin
 git branch --show-current
 ```
 
-Parse the repo name from the remote URL: take the last path segment and strip the `.git` suffix.
-Strip `refs/heads/` prefix from branch names returned by Azure APIs.
+### When `provider` is `azure_devops`
 
-**2. Fetch PR metadata:**
+1. Call `mcp__azure-devops__repo_get_pull_request_by_id` with
+   `repositoryId` = `repo` from settings, `pullRequestId` = PR number.
+   Extract: `title`, `description`, `targetRefName` (strip `refs/heads/`),
+   `createdBy.displayName`.
+2. On failure, STOP: `"INGEST failed — could not fetch PR #<n>: <error>"`.
+3. Call `mcp__azure-devops__repo_list_pull_request_threads`.
+   Map fields per `azure-pr-mechanics.md`. Skip `resolved` / `wontFix`.
+4. Call `mcp__azure-devops__repo_get_pull_request_changes` for changed paths.
+   On failure, warn and continue.
+5. For file context later, use `Read(<file-path>)` on the working tree.
 
-Call `mcp__azure-devops__repo_get_pull_request_by_id` with `repositoryId` = inferred repo name, `pullRequestId` = PR number.
+### When `provider` is `github`
 
-Extract: `title`, `description`, `targetRefName` (strip `refs/heads/`), `createdBy.displayName`.
+1. Run `gh pr view <n> --json title,body,baseRefName,author,headRefName`
+   per `github-pr-mechanics.md`. Target branch = `baseRefName`.
+2. On failure, STOP: `"INGEST failed — could not fetch PR #<n>: <error>"`.
+3. Fetch review threads via GraphQL (preferred) or REST fallback; skip
+   resolved/outdated; map fields per `github-pr-mechanics.md`.
+4. Run `gh pr diff <n> --name-only` for changed paths. On failure, warn
+   and continue.
+5. For file context later, use `Read(<file-path>)` on the working tree.
 
-If this call fails, STOP and report: `"INGEST failed — could not fetch PR #<n>: <error>"`. Do not proceed.
+### INGEST summary (all providers)
 
-**3. Fetch review threads:**
-
-Call `mcp__azure-devops__repo_list_pull_request_threads` with `repositoryId` and `pullRequestId`.
-
-For each thread, extract:
-- `id` → `thread_id`
-- `status` → `status`
-- `threadContext.filePath` → `file` (null if threadContext is null)
-- `threadContext.rightFileStart.line` → `line` (null if threadContext is null)
-- `comments[0].content` → `comment_text`
-- `comments[0].author.displayName` → `reviewer`
-
-**Filter:** skip threads where `status` is `resolved` or `wontFix`. Count skipped threads separately.
-
-**4. Fetch PR diff:**
-
-Call `mcp__azure-devops__repo_get_pull_request_changes` with `repositoryId` and `pullRequestId`.
-
-Store the list of changed file paths. Use during CLASSIFY to locate relevant diff hunks by reading the file from the working tree with `Read(<file-path>)`.
-
-If this call fails, log a warning and continue — CLASSIFY will note absence of diff context.
-
-**5. Report INGEST summary to terminal:**
-
-```
+```text
 PR #<n> — "<title>"
 Branch: <active-branch> → <target>
 <N> threads fetched · <S> skipped · <A> active — proceeding to CLASSIFY
@@ -87,11 +169,19 @@ Branch: <active-branch> → <target>
 For each active ReviewThread in order:
 
 1. Read `comment_text` and `reviewer`.
-2. If `file` is non-null and the file exists in the working tree, read the file with `Read(<file>)` and locate the region around `line` (±20 lines) for diff context.
+2. If `file` is non-null and the file exists in the working tree, read the
+   file with `Read(<file>)` and locate the region around `line` (±20 lines)
+   for diff context.
 3. Decide `comply` or `reject`:
-   - **comply** — the reviewer's point is technically valid and the code should be changed. Set `action`: a concise description of the exact change needed, referencing file path and line number.
-   - **reject** — the current implementation is correct or the reviewer lacks full context. Set `reason`: a paragraph (2–5 sentences) suitable for posting as a public reply — clear, respectful, technically grounded. No "you're wrong" framing.
-4. Set `reaction`, and populate either `action` (comply) or `reason` (reject). Leave the other field null.
+   - **comply** — the reviewer's point is technically valid and the code
+     should be changed. Set `action`: a concise description of the exact
+     change needed, referencing file path and line number.
+   - **reject** — the current implementation is correct or the reviewer
+     lacks full context. Set `reason`: a paragraph (2–5 sentences) suitable
+     for posting as a public reply — clear, respectful, technically
+     grounded. No "you're wrong" framing.
+4. Set `reaction`, and populate either `action` (comply) or `reason`
+   (reject). Leave the other field null.
 
 Proceed to PHASE 3 once all threads are classified.
 
@@ -99,11 +189,15 @@ Proceed to PHASE 3 once all threads are classified.
 
 ## PHASE 3 — PRESENT
 
-Read `references/report-format.md` for the exact terminal output template before printing.
+Read `references/report-format.md` for the exact terminal output template
+before printing.
 
-1. Print the full classification report using the template in `report-format.md`.
+1. Print the full classification report using the template in
+   `report-format.md`.
 2. Wait for user input.
-3. Apply any adjustments the user specifies — accepted verbs: flip / change action / change reason / skip (see full table in report-format.md).
+3. Apply any adjustments the user specifies — accepted verbs: flip /
+   change action / change reason / skip (see full table in
+   `report-format.md`).
 4. Re-print the updated list.
 5. Ask: `"Confirmed? (yes to proceed to ACT, or make further changes)"`
 6. Wait for confirmation before proceeding.
@@ -114,11 +208,11 @@ Do not proceed to ACT until the user explicitly confirms.
 
 ## PHASE 4 — ACT
 
-Read `references/azure-pr-mechanics.md` before making any MCP calls.
+Re-read the provider mechanics reference before posting replies.
 
 Execute confirmed items only. Process comply items first, then reject items.
 
-**Comply items — code edits:**
+**Comply items — code edits (all providers):**
 
 For each comply item (not skipped):
 1. Read the target file.
@@ -126,12 +220,17 @@ For each comply item (not skipped):
 3. Do NOT commit. Changes land in the working tree.
 4. Record outcome: `done` or `failed: <reason>`.
 
-**Reject items — Azure thread replies:**
+**Reject items — thread replies:**
 
 For each reject item (not skipped):
-1. Call `mcp__azure-devops__repo_reply_to_comment` with `repositoryId`, `pullRequestId`, `threadId` = `thread_id`, `content` = `reason`.
-2. Do NOT call any tool that changes thread status.
-3. Record outcome: `posted` or `failed: <reason>`.
+
+- **azure_devops:** Call `mcp__azure-devops__repo_reply_to_comment` with
+  `repositoryId` = settings `repo`, `pullRequestId`, `threadId` =
+  `thread_id`, `content` = `reason`. Do NOT call any status-changing tool.
+- **github:** Reply via `gh api` with `in_reply_to` = `thread_id` per
+  `github-pr-mechanics.md`. Do NOT resolve or dismiss the conversation.
+
+Record outcome: `posted` or `failed: <reason>`.
 
 Print ACT outcomes to terminal using the template in `report-format.md`.
 
@@ -142,11 +241,13 @@ Print ACT outcomes to terminal using the template in `report-format.md`.
 Read `references/report-format.md` for the vault note template before writing.
 
 Write the vault note to:
-```
+
+```text
 AI_Codex/Agent_Reports/YYYY-MM-DD-pr-review-<PR#>.md
 ```
 
-Use today's date (YYYY-MM-DD). Frontmatter and body follow the template in `report-format.md`.
+Use today's date (YYYY-MM-DD). Frontmatter and body follow the template in
+`report-format.md`. Include `scm_provider` from settings.
 
 Set `outcome`:
 - `complete` if every non-skipped ACT item succeeded.
@@ -156,8 +257,16 @@ Set `outcome`:
 
 ## Guardrails
 
-- **Thread status immutability**: never call `repo_update_pull_request_thread` or any status-changing tool. `repo_reply_to_comment` only.
-- **No automatic commits**: code edits land in the working tree; the user commits via `/commit-prep`.
-- **Skip over MCP reply errors**: if one reply fails to post, log the failure and continue with remaining items.
-- **One PR per invocation**: warn and process only the first if multiple numbers given.
-- **Skipped threads**: excluded from CLASSIFY, PRESENT display, and ACT. Never acted on.
+- **Thread status immutability**: reply only; never resolve, dismiss, or
+  update thread status (Azure or GitHub).
+- **No automatic commits**: code edits land in the working tree; the user
+  commits via `/commit-prep`.
+- **Skip over reply errors**: if one reply fails to post, log the failure
+  and continue with remaining items.
+- **One PR per invocation**: warn and process only the first if multiple
+  numbers given.
+- **Skipped threads**: excluded from CLASSIFY, PRESENT display, and ACT.
+  Never acted on.
+- **Project-only settings**: write `.codex-workflows/scm-provider.json`
+  only under the project root; never under `$HOME` or plugin cache.
+- **Unknown remotes**: fail closed at SETUP.
