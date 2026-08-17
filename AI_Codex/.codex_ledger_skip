@@ -1,0 +1,4 @@
+# Codex workflow ledger enforcement skipped
+skipped_at: 2026-07-29T01:57:09.512125+00:00
+reason: user requested investigate/fix installer ModuleNotFoundError
+# Remove this file or run /resume-ledger to restore hooks.
