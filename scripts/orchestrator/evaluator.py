@@ -1,8 +1,24 @@
+from collections.abc import Callable
 from typing import Any
 
 
+SemanticEvaluator = Callable[[dict[str, Any], dict[str, Any]], list[str]]
+
+
 def skill_validation_critiques(output: dict[str, Any]) -> list[str]:
-    """Critiques from Actor-Critic skill handlers, separate from schema validation."""
+    """Backward-compatible alias for the legacy semantic output convention."""
+    return legacy_semantic_evaluator(output, {})
+
+
+def legacy_semantic_evaluator(
+    output: dict[str, Any], _manifest: dict[str, Any]
+) -> list[str]:
+    """Interpret the version 0.5.20 ``mode``/``critiques`` convention.
+
+    This adapter preserves existing handlers. It is deliberately named as
+    compatibility behavior: accepting a producer's self-report is not an
+    independent semantic verification strategy.
+    """
     mode = output.get("mode", "")
     if mode == "completed":
         return []
@@ -19,12 +35,27 @@ def skill_validation_critiques(output: dict[str, Any]) -> list[str]:
     return parts
 
 
-def collect_critiques(output: Any, manifest: dict[str, Any]) -> list[str]:
+def collect_critiques(
+    output: Any,
+    manifest: dict[str, Any],
+    *,
+    semantic_evaluator: SemanticEvaluator = legacy_semantic_evaluator,
+) -> list[str]:
+    """Collect structural critiques, then invoke the configured semantic contract."""
     schema_critiques = evaluate_output(output, manifest)
     if schema_critiques:
         return schema_critiques
     if isinstance(output, dict):
-        return skill_validation_critiques(output)
+        try:
+            critiques = semantic_evaluator(output, manifest)
+        except Exception as exc:
+            return [f"Semantic evaluator raised {type(exc).__name__}: {exc}"]
+        if not isinstance(critiques, list):
+            return [
+                "Semantic evaluator returned "
+                f"{type(critiques).__name__}; expected list[str]."
+            ]
+        return [str(item) for item in critiques if item]
     return []
 
 

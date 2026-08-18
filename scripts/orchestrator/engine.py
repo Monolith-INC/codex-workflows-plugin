@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .evaluator import collect_critiques
+from .evaluator import SemanticEvaluator, collect_critiques, legacy_semantic_evaluator
 from .hooks import authorization_hook, cli_ui_hook
 from .manifests import manifest_by_name
 from .schema import validate_inputs
@@ -51,11 +51,13 @@ class OrchestratorEngine:
         max_retries: int = 3,
         interactive: bool = False,
         quiet: bool = False,
+        semantic_evaluator: SemanticEvaluator = legacy_semantic_evaluator,
     ):
         self.skills_dir = Path(skills_dir)
         self.max_retries = max_retries
         self.interactive = interactive
         self.quiet = quiet
+        self.semantic_evaluator = semantic_evaluator
         self._manifests = manifest_by_name(self.skills_dir)
 
     def _subscribe_hooks(self, stream: OrchestratorStream) -> None:
@@ -127,7 +129,11 @@ class OrchestratorEngine:
                     state=current.state.value,
                 )
 
-            critiques = collect_critiques(output, manifest)
+            critiques = collect_critiques(
+                output,
+                manifest,
+                semantic_evaluator=self.semantic_evaluator,
+            )
             if not critiques:
                 stream.dispatch(
                     Event(type="TaskCompletedEvent", payload={"task_id": task_id, "output": output})

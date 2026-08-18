@@ -89,6 +89,21 @@ class TestOrchestratorEngineE2E(unittest.TestCase):
         self.assertIn("Do the thing.", result.output["prompt"])
         self.assertEqual(result.output.get("attempt"), 1)
 
+    def test_engine_uses_an_explicit_semantic_evaluator(self):
+        observed = []
+
+        def evaluator(output, manifest):
+            observed.append((output["skill"], manifest["name"]))
+            return []
+
+        engine = OrchestratorEngine(
+            self.skills_dir, semantic_evaluator=evaluator
+        )
+        result = engine.run_tool_call("mock-skill", {"arg1": "value"})
+
+        self.assertTrue(result.ok, result.error)
+        self.assertEqual(observed, [("mock-skill", "mock-skill")])
+
     def test_identical_retry_output_fails_fast(self):
         self._write_skill(
             "strict-skill",
