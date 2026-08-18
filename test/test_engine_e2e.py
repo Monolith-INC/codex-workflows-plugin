@@ -110,7 +110,10 @@ class TestOrchestratorEngineE2E(unittest.TestCase):
             {
                 "name": "strict-skill",
                 "description": "Requires success flag",
-                "input_schema": {"type": "object", "properties": {}},
+                "input_schema": {
+                    "type": "object",
+                    "properties": {"context": {"type": "string"}},
+                },
                 "output_signature": {
                     "type": "object",
                     "required": ["success"],
@@ -120,7 +123,7 @@ class TestOrchestratorEngineE2E(unittest.TestCase):
             "# strict\n",
         )
         engine = OrchestratorEngine(self.skills_dir, max_retries=25)
-        result = engine.run_tool_call("strict-skill", {})
+        result = engine.run_tool_call("strict-skill", {"context": "preserved"})
         self.assertFalse(result.ok)
         self.assertIn("success", result.error or "")
         self.assertEqual(result.state, "Blocked_Requires_Review")
@@ -134,6 +137,7 @@ class TestOrchestratorEngineE2E(unittest.TestCase):
             "Missing required output property 'success'.",
             result.output.get("prompt", ""),
         )
+        self.assertIn('"context": "preserved"', result.output.get("prompt", ""))
 
     def test_mcp_tools_call_round_trip(self):
         init = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})

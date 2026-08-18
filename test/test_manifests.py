@@ -11,6 +11,26 @@ from scripts.orchestrator.manifests import (
 
 
 class TestManifests(unittest.TestCase):
+    def test_malformed_json_is_isolated_with_a_diagnostic(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bad_dir = Path(tmpdir) / "bad-skill"
+            bad_dir.mkdir()
+            (bad_dir / "manifest.json").write_text("{not json", encoding="utf-8")
+
+            good_dir = Path(tmpdir) / "good-skill"
+            good_dir.mkdir()
+            (good_dir / "manifest.json").write_text(
+                json.dumps({"name": "good-skill"}), encoding="utf-8"
+            )
+
+            discovery = discover_manifests(tmpdir)
+            self.assertEqual(
+                [item["name"] for item in discovery.manifests], ["good-skill"]
+            )
+            self.assertEqual(
+                [item.code for item in discovery.diagnostics], ["invalid_json"]
+            )
+
     def test_ignores_non_object_manifest_json(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             skill_dir = Path(tmpdir) / "bad-skill"
