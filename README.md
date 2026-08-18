@@ -92,7 +92,19 @@ Bootstrap writes the MCP server when `--dest` is provided:
 
 Azure DevOps is never invented by the installer; if it already exists in `.mcp.json`, Codex gets `env_vars = ["DISPLAY", …]` and Cursor gets matching `${env:DISPLAY}` entries so interactive browser auth can see the desktop session. Claude/Gemini typically inherit the parent session environment for `.mcp.json` servers once enabled.
 
-Each skill under `skills/<name>/` carries a `manifest.json` with `input_schema` and `output_signature` consumed by the orchestrator.
+Each skill under `skills/<name>/` carries a `manifest.json` with `input_schema`
+and `output_signature` consumed by the orchestrator. Discovery validates each
+manifest independently: invalid or duplicate capabilities are excluded without
+hiding valid siblings, and `discover_manifests()` exposes path-scoped
+diagnostics. Input schemas remain permissive by default; a capability can reject
+unknown arguments explicitly with `"additionalProperties": false`.
+
+Structural output validation runs before semantic evaluation. Existing callers
+retain the version 0.5.20 `mode`/`critiques` behavior through
+`legacy_semantic_evaluator`, while integrations that can independently assess a
+result may inject a `semantic_evaluator` when constructing
+`OrchestratorEngine`. Queue state and event history are recursively immutable,
+and invalid state transitions are retained as auditable no-ops.
 
 ---
 

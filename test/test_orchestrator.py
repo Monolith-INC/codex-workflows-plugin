@@ -1,6 +1,6 @@
 import json
 import unittest
-from scripts.orchestrator.state import QueueState, Task, TaskState, Event
+from scripts.orchestrator.state import Event, FrozenDict, QueueState, Task, TaskState
 from scripts.orchestrator.reducers import reduce_queue_state
 
 class TestOrchestratorReducers(unittest.TestCase):
@@ -87,12 +87,28 @@ class TestOrchestratorReducers(unittest.TestCase):
 
     def test_nested_state_is_immutable_and_json_serializable(self):
         source_inputs = {"nested": {"items": ["first"]}}
-        task = Task(id="task", skill_name="demo", inputs=source_inputs)
+        source_output = {"nested": {"items": ["result"]}}
+        source_dependencies = ["dependency"]
+        source_critiques = ["critique"]
+        task = Task(
+            id="task",
+            skill_name="demo",
+            inputs=source_inputs,
+            dependencies=source_dependencies,
+            critiques=source_critiques,
+            output=source_output,
+        )
         event = Event(type="Observed", payload={"nested": {"value": 1}})
         state = QueueState(tasks={"task": task}, events_history=[event])
 
         source_inputs["nested"]["items"].append("source mutation")
+        source_output["nested"]["items"].append("source mutation")
+        source_dependencies.append("source mutation")
+        source_critiques.append("source mutation")
         self.assertEqual(task.inputs["nested"]["items"], ("first",))
+        self.assertEqual(task.output["nested"]["items"], ("result",))
+        self.assertEqual(task.dependencies, ("dependency",))
+        self.assertEqual(task.critiques, ("critique",))
         with self.assertRaises(TypeError):
             task.inputs["nested"]["other"] = True
         with self.assertRaises(TypeError):
@@ -102,6 +118,17 @@ class TestOrchestratorReducers(unittest.TestCase):
 
         rendered = json.dumps(task.inputs)
         self.assertIn('"first"', rendered)
+
+    def test_preconstructed_frozen_dict_is_recursively_normalized(self):
+        nested_items = ["first"]
+        task = Task(
+            id="task",
+            skill_name="demo",
+            inputs=FrozenDict({"nested": nested_items}),
+        )
+
+        nested_items.append("source mutation")
+        self.assertEqual(task.inputs["nested"], ("first",))
 
     def test_invalid_transition_is_a_recorded_no_op(self):
         state = QueueState(

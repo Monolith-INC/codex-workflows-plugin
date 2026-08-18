@@ -25,8 +25,6 @@ class FrozenDict(dict):
 
 def deep_freeze(value: Any) -> Any:
     """Recursively freeze common JSON-like containers."""
-    if isinstance(value, FrozenDict):
-        return value
     if isinstance(value, Mapping):
         return FrozenDict({key: deep_freeze(item) for key, item in value.items()})
     if isinstance(value, (list, tuple)):
@@ -70,8 +68,8 @@ class Task:
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "inputs", deep_freeze(self.inputs))
-        object.__setattr__(self, "dependencies", tuple(self.dependencies))
-        object.__setattr__(self, "critiques", tuple(self.critiques))
+        object.__setattr__(self, "dependencies", deep_freeze(self.dependencies))
+        object.__setattr__(self, "critiques", deep_freeze(self.critiques))
         object.__setattr__(self, "output", deep_freeze(self.output))
 
     def copy_with(self, **kwargs: Any) -> "Task":
@@ -88,7 +86,7 @@ class QueueState:
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "tasks", deep_freeze(self.tasks))
-        object.__setattr__(self, "events_history", tuple(self.events_history))
+        object.__setattr__(self, "events_history", deep_freeze(self.events_history))
 
     def copy_with(self, **kwargs: Any) -> "QueueState":
         """Return a new immutable queue with the requested fields replaced."""

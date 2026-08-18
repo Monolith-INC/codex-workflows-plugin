@@ -124,6 +124,16 @@ class TestOrchestratorEngineE2E(unittest.TestCase):
         self.assertFalse(result.ok)
         self.assertIn("success", result.error or "")
         self.assertEqual(result.state, "Blocked_Requires_Review")
+        self.assertEqual(result.output.get("attempt"), 2)
+        self.assertEqual(
+            result.output.get("reflection_critiques"),
+            ["Missing required output property 'success'."],
+        )
+        self.assertIn("<reflection>", result.output.get("prompt", ""))
+        self.assertIn(
+            "Missing required output property 'success'.",
+            result.output.get("prompt", ""),
+        )
 
     def test_mcp_tools_call_round_trip(self):
         init = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})
@@ -145,7 +155,11 @@ class TestOrchestratorEngineE2E(unittest.TestCase):
         self.assertEqual(list_res["result"]["tools"][0]["name"], "mock-skill")
         payload = json.loads(call_res["result"]["content"][0]["text"])
         self.assertEqual(payload["status"], "completed")
+        self.assertEqual(payload["output"]["mode"], "instructions")
         self.assertEqual(payload["output"]["inputs"]["arg1"], "hello")
+        self.assertIn("Do the thing.", payload["output"]["prompt"])
+        self.assertEqual(payload["output"]["attempt"], 1)
+        self.assertNotIn("reflection_critiques", payload["output"])
 
     def test_write_spec_bad_draft_fails_orchestrator(self):
         repo_skills = Path(__file__).parent.parent / "skills"
