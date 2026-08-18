@@ -30,6 +30,8 @@ def validate_inputs(arguments: dict[str, Any], manifest: dict[str, Any]) -> list
     for key, value in arguments.items():
         prop = properties.get(key)
         if prop is None:
+            if schema.get("additionalProperties", True) is False:
+                critiques.append(f"Unknown argument '{key}' is not allowed.")
             continue
         expected_type = prop.get("type")
         if expected_type and expected_type in _TYPE_CHECKS:
