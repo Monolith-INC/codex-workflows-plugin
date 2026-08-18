@@ -30,7 +30,9 @@ class TestHooksAndStream(unittest.TestCase):
         
         # 2. Fail 3 times to trip the circuit breaker
         self.stream.dispatch(Event(type="TaskFailedEvent", payload={"task_id": "task_c", "critique": "Error 1"}))
+        self.stream.dispatch(Event(type="TaskSpawnedEvent", payload={"task_id": "task_c"}))
         self.stream.dispatch(Event(type="TaskFailedEvent", payload={"task_id": "task_c", "critique": "Error 2"}))
+        self.stream.dispatch(Event(type="TaskSpawnedEvent", payload={"task_id": "task_c"}))
         
         # The 3rd failure will trip the circuit breaker, changing state to BLOCKED_REQUIRES_REVIEW.
         # The authorization_hook will catch this, prompt the user (mocked), and dispatch an AuthorizationReceivedEvent.
@@ -68,8 +70,8 @@ class TestHooksAndStream(unittest.TestCase):
 
         stream = OrchestratorStream(self.initial_state, max_retries=3)
         stream.subscribe(outer_hook)
-        stream.dispatch(Event(type="TaskSpawnedEvent", payload={"task_id": "task_c"}))
         for i in range(3):
+            stream.dispatch(Event(type="TaskSpawnedEvent", payload={"task_id": "task_c"}))
             stream.dispatch(Event(type="TaskFailedEvent", payload={"task_id": "task_c", "critique": f"err {i}"}))
 
         self.assertEqual(stream.state.tasks["task_c"].state, TaskState.READY)

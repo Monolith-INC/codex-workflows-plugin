@@ -1,3 +1,4 @@
+import json
 import unittest
 from scripts.orchestrator.state import QueueState, Task, TaskState, Event
 from scripts.orchestrator.reducers import reduce_queue_state
@@ -29,30 +30,41 @@ class TestOrchestratorReducers(unittest.TestCase):
 
     def test_circuit_breaker_and_reflection_loop(self):
         state = self.initial_state
-        
-        # Fail Task A (Retry 1)
-        event_fail_1 = Event(type="TaskFailedEvent", payload={"task_id": "task_a", "critique": "Failed compilation"})
-        state = reduce_queue_state(state, event_fail_1)
-        
+
+        state = reduce_queue_state(
+            state, Event(type="TaskSpawnedEvent", payload={"task_id": "task_a"})
+        )
+        state = reduce_queue_state(
+            state,
+            Event(
+                type="TaskFailedEvent",
+                payload={"task_id": "task_a", "critique": "Failed compilation"},
+            ),
+        )
+
         self.assertEqual(state.tasks["task_a"].state, TaskState.READY)
         self.assertEqual(state.tasks["task_a"].retry_count, 1)
         self.assertEqual(len(state.tasks["task_a"].critiques), 1)
-        
-        # Fail Task A (Retry 2)
-        event_fail_2 = Event(type="TaskFailedEvent", payload={"task_id": "task_a", "critique": "Missing import"})
-        state = reduce_queue_state(state, event_fail_2)
-        
-        # Fail Task A (Retry 3) - Should trip circuit breaker (default max_retries=3)
-        event_fail_3 = Event(type="TaskFailedEvent", payload={"task_id": "task_a", "critique": "Still failing"})
-        state = reduce_queue_state(state, event_fail_3)
-        
+
+        for critique in ("Missing import", "Still failing"):
+            state = reduce_queue_state(
+                state, Event(type="TaskSpawnedEvent", payload={"task_id": "task_a"})
+            )
+            state = reduce_queue_state(
+                state,
+                Event(
+                    type="TaskFailedEvent",
+                    payload={"task_id": "task_a", "critique": critique},
+                ),
+            )
+
         self.assertEqual(state.tasks["task_a"].state, TaskState.BLOCKED_REQUIRES_REVIEW, "Circuit breaker should block task")
         self.assertEqual(state.tasks["task_a"].retry_count, 3)
-        
+
         # Authorize Task A after manual review / instruction update
         event_auth = Event(type="AuthorizationReceivedEvent", payload={"task_id": "task_a", "token": "IMPLEMENTATION APPROVED"})
         state = reduce_queue_state(state, event_auth)
-        
+
         self.assertEqual(state.tasks["task_a"].state, TaskState.READY, "Task should be READY after authorization")
         self.assertEqual(state.tasks["task_a"].retry_count, 0, "Retries should be reset")
         self.assertEqual(len(state.tasks["task_a"].critiques), 0, "Critiques should be cleared")
@@ -72,6 +84,45 @@ class TestOrchestratorReducers(unittest.TestCase):
         event_complete = Event(type="TaskCompletedEvent", payload={"task_id": "task_a", "output": "done"})
         state = reduce_queue_state(state, event_complete)
         self.assertEqual(state.tasks["task_b"].state, TaskState.BLOCKED)
+
+    def test_nested_state_is_immutable_and_json_serializable(self):
+        source_inputs = {"nested": {"items": ["first"]}}
+        task = Task(id="task", skill_name="demo", inputs=source_inputs)
+        event = Event(type="Observed", payload={"nested": {"value": 1}})
+        state = QueueState(tasks={"task": task}, events_history=[event])
+
+        source_inputs["nested"]["items"].append("source mutation")
+        self.assertEqual(task.inputs["nested"]["items"], ("first",))
+        with self.assertRaises(TypeError):
+            task.inputs["nested"]["other"] = True
+        with self.assertRaises(TypeError):
+            event.payload["nested"]["value"] = 2
+        with self.assertRaises(TypeError):
+            state.tasks["other"] = task
+
+        rendered = json.dumps(task.inputs)
+        self.assertIn('"first"', rendered)
+
+    def test_invalid_transition_is_a_recorded_no_op(self):
+        state = QueueState(
+            tasks={"task": Task(id="task", skill_name="demo", state=TaskState.READY)}
+        )
+        event = Event(
+            type="TaskCompletedEvent", payload={"task_id": "task", "output": "too early"}
+        )
+
+        after = reduce_queue_state(state, event)
+
+        self.assertEqual(after.tasks["task"].state, TaskState.READY)
+        self.assertIsNone(after.tasks["task"].output)
+        self.assertEqual(after.events_history, (event,))
+
+    def test_unknown_and_missing_task_events_are_recorded_once(self):
+        state = QueueState()
+        events = [Event(type="Unknown"), Event(type="TaskFailedEvent")]
+        for event in events:
+            state = reduce_queue_state(state, event)
+        self.assertEqual(state.events_history, tuple(events))
 
 if __name__ == '__main__':
     unittest.main()

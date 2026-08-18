@@ -90,7 +90,7 @@ class OrchestratorEngine:
         self._subscribe_hooks(stream)
         stream.dispatch(Event(type="TaskSpawnedEvent", payload={"task_id": task_id}))
 
-        last_output: dict[str, Any] | None = None
+        last_output: Any = None
         last_critiques: list[str] = []
 
         while True:
@@ -134,11 +134,16 @@ class OrchestratorEngine:
                 )
                 return ToolCallResult(ok=True, output=output, task_id=task_id, state=TaskState.COMPLETED.value)
 
-            if critiques == last_critiques and output == last_output:
+            stable_output = _stall_signature(output)
+            if critiques == last_critiques and stable_output == last_output:
                 stream.dispatch(
                     Event(
                         type="TaskFailedEvent",
-                        payload={"task_id": task_id, "critique": "; ".join(critiques)},
+                        payload={
+                            "task_id": task_id,
+                            "critique": "; ".join(critiques),
+                            "halt": True,
+                        },
                     )
                 )
                 current = stream.state.tasks[task_id]
@@ -150,7 +155,7 @@ class OrchestratorEngine:
                     state=current.state.value,
                 )
 
-            last_output = output
+            last_output = stable_output
             last_critiques = list(critiques)
             stream.dispatch(
                 Event(
@@ -184,3 +189,22 @@ class OrchestratorEngine:
                 task_id=task_id,
                 state=current.state.value,
             )
+
+
+_VOLATILE_OUTPUT_FIELDS = frozenset({"attempt", "prompt", "reflection_critiques"})
+
+
+def _stall_signature(output: Any) -> Any:
+    """Remove orchestration metadata that changes even when work does not.
+
+    The worker adds a new prompt and attempt number on every retry. Comparing
+    that projected envelope made deterministic handler output look different and
+    rendered stall detection ineffective for instruction-only capabilities.
+    """
+    if not isinstance(output, dict):
+        return output
+    return {
+        key: value
+        for key, value in output.items()
+        if key not in _VOLATILE_OUTPUT_FIELDS
+    }

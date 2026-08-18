@@ -104,10 +104,11 @@ class TestOrchestratorEngineE2E(unittest.TestCase):
             },
             "# strict\n",
         )
-        engine = OrchestratorEngine(self.skills_dir, max_retries=2)
+        engine = OrchestratorEngine(self.skills_dir, max_retries=25)
         result = engine.run_tool_call("strict-skill", {})
         self.assertFalse(result.ok)
         self.assertIn("success", result.error or "")
+        self.assertEqual(result.state, "Blocked_Requires_Review")
 
     def test_mcp_tools_call_round_trip(self):
         init = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})
