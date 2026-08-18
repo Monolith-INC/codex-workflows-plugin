@@ -75,11 +75,39 @@ changes to ticket or YouTrack workflow policy.
 
 ## Implementation Summary
 
-Not started. The required implementation plan and technical specification were
-accepted by the write-spec Actor–Critic check on the first round with no
-critiques. The specification gate is complete; source implementation may begin.
+Implemented in five atomic commits after the accepted specification gate:
+
+- `e3f80d0` validates and isolates manifests, diagnoses duplicate capability
+  names, and makes strict unknown-input rejection opt-in.
+- `13a858f` recursively freezes queue state, enforces reducer transitions,
+  records every event once, and makes deterministic retry stalls halt early.
+- `ce381b9` introduces injectable semantic evaluation while retaining the named
+  version 0.5.20 legacy adapter as the default.
+- `648d810` closes the preconstructed-`FrozenDict` nesting loophole and adds
+  explicit retry/MCP compatibility assertions and public contract notes.
+- `8727d76` proves malformed-JSON sibling isolation and retry-prompt input
+  preservation directly.
+
+The deliberate compatibility choices are permissive-by-default input schemas,
+the legacy semantic evaluator as the constructor default, unchanged MCP result
+shapes, and compatibility wrappers for manifest lookup. No dependency, host
+adapter, installer, tenant-policy, or ticket-workflow behavior was changed.
+
+Rollback remains milestone-local: revert the manifest, state/reducer, semantic,
+or final immutability commit independently. The characterization tests should
+remain whenever they document the version 0.5.20 compatibility boundary.
 
 ## Verification
 
 Baseline: `python3 -m unittest` passed 233 tests in 9.2 seconds on source version
 0.5.20 before this ticket was activated.
+
+Final verification on `8727d76`:
+
+- `python3 -m unittest` — 249 tests passed in 8.650 seconds.
+- Focused orchestrator tests — 36 tests passed.
+- `python3 -m compileall -q scripts/orchestrator` — passed with bytecode directed
+  to a temporary cache.
+- `python3 scripts/validate_plugin.py` — passed.
+- `git diff --check` — passed.
+- Live `skills/` discovery — 13 manifests, 0 diagnostics.

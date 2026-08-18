@@ -35,49 +35,49 @@ add dialects, or change ticket and YouTrack workflow rules.
 
 ## Tasks
 
-- [ ] M0 — Characterization (1–2 hours)
-  - [ ] Assert unknown input keys remain accepted unless a manifest explicitly
+- [x] M0 — Characterization (1–2 hours)
+  - [x] Assert unknown input keys remain accepted unless a manifest explicitly
     declares `additionalProperties: false`.
-  - [ ] Assert retry prompts include prior critiques, task inputs, and an
+  - [x] Assert retry prompts include prior critiques, task inputs, and an
     incremented attempt.
-  - [ ] Assert instruction-only MCP results retain `mode`, `inputs`, `prompt`,
+  - [x] Assert instruction-only MCP results retain `mode`, `inputs`, `prompt`,
     `attempt`, and reflection content.
-  - [ ] Assert current completed-mode semantic compatibility.
-- [ ] M1 — Manifest and input contracts (2–4 hours)
-  - [ ] Add a pure manifest validator for identity, description, input schema,
+  - [x] Assert current completed-mode semantic compatibility.
+- [x] M1 — Manifest and input contracts (2–4 hours)
+  - [x] Add a pure manifest validator for identity, description, input schema,
     and output signature shapes.
-  - [ ] Add a discovery result containing valid manifests and per-path
+  - [x] Add a discovery result containing valid manifests and per-path
     diagnostics; keep `read_manifests()` and `manifest_by_name()` compatibility
     wrappers.
-  - [ ] Detect duplicate names deterministically instead of silently replacing
+  - [x] Detect duplicate names deterministically instead of silently replacing
     one capability with another.
-  - [ ] Enforce unknown-key rejection only for schemas that explicitly declare
+  - [x] Enforce unknown-key rejection only for schemas that explicitly declare
     `additionalProperties: false`.
-  - [ ] Test malformed JSON, non-object roots, malformed nested schemas,
+  - [x] Test malformed JSON, non-object roots, malformed nested schemas,
     duplicate names, mixed valid/invalid sets, and strict/permissive inputs.
-- [ ] M2 — State and reducer contracts (3–5 hours)
-  - [ ] Add recursive freezing for mappings and sequences used by event payloads,
+- [x] M2 — State and reducer contracts (3–5 hours)
+  - [x] Add recursive freezing for mappings and sequences used by event payloads,
     task inputs, dependencies, critiques, outputs, task maps, and history.
-  - [ ] Preserve JSON prompt projection and value equality for supported data.
-  - [ ] Centralize history append so every dispatched event is recorded once.
-  - [ ] Define valid state/event transitions; invalid transitions become
+  - [x] Preserve JSON prompt projection and value equality for supported data.
+  - [x] Centralize history append so every dispatched event is recorded once.
+  - [x] Define valid state/event transitions; invalid transitions become
     deterministic recorded no-ops rather than implicit state changes.
-  - [ ] Preserve dependency promotion and queued nested dispatch.
-- [ ] M3 — Semantic evaluation contract (2–4 hours)
-  - [ ] Define a callable semantic-evaluator protocol receiving the result and
+  - [x] Preserve dependency promotion and queued nested dispatch.
+- [x] M3 — Semantic evaluation contract (2–4 hours)
+  - [x] Define a callable semantic-evaluator protocol receiving the result and
     manifest and returning critiques.
-  - [ ] Rename the current `mode`/`critiques` behavior as a legacy compatibility
+  - [x] Rename the current `mode`/`critiques` behavior as a legacy compatibility
     evaluator and retain it as the default for version 0.5.20 consumers.
-  - [ ] Allow `OrchestratorEngine` to receive an evaluator explicitly without a
+  - [x] Allow `OrchestratorEngine` to receive an evaluator explicitly without a
     module-level registry.
-  - [ ] Test custom evaluation, legacy completed-mode behavior, structural
+  - [x] Test custom evaluation, legacy completed-mode behavior, structural
     short-circuiting, and evaluator exceptions.
-- [ ] M4 — Integration and documentation (1–2 hours)
-  - [ ] Run focused orchestrator tests after every milestone.
-  - [ ] Run `python3 -m unittest` and require at least the 233-test baseline.
-  - [ ] Run `python3 scripts/validate_plugin.py`.
-  - [ ] Update public documentation only where contract behavior changed.
-  - [ ] Record deliberate deltas, verification, and rollback points in the
+- [x] M4 — Integration and documentation (1–2 hours)
+  - [x] Run focused orchestrator tests after every milestone.
+  - [x] Run `python3 -m unittest` and require at least the 233-test baseline.
+  - [x] Run `python3 scripts/validate_plugin.py`.
+  - [x] Update public documentation only where contract behavior changed.
+  - [x] Record deliberate deltas, verification, and rollback points in the
     active ticket ledger.
 
 ## Dependencies
