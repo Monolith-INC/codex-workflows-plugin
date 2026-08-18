@@ -11,6 +11,7 @@ This vault tracks repository-local agent sessions and active work ledgers.
 ## Projects
 
 - `codex-workflows-plugin`
+- `airlock` — moved out; keeps its own ledger at `../airlock/AI_Codex/`
 
 ## Current Operating Rule
 
