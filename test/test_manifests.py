@@ -25,7 +25,7 @@ class TestManifests(unittest.TestCase):
 
             discovery = discover_manifests(tmpdir)
             self.assertEqual(
-                [item["name"] for item in discovery.manifests], ["good-skill"]
+                [item.name for item in discovery.manifests], ["good-skill"]
             )
             self.assertEqual(
                 [item.code for item in discovery.diagnostics], ["invalid_json"]
@@ -46,7 +46,7 @@ class TestManifests(unittest.TestCase):
 
             manifests = read_manifests(tmpdir)
             self.assertEqual(len(manifests), 1)
-            self.assertEqual(manifest_by_name(tmpdir)["good-skill"]["name"], "good-skill")
+            self.assertEqual(manifest_by_name(tmpdir)["good-skill"].name, "good-skill")
 
     def test_malformed_schema_is_isolated_with_a_diagnostic(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -65,7 +65,7 @@ class TestManifests(unittest.TestCase):
             )
 
             discovery = discover_manifests(tmpdir)
-            self.assertEqual([item["name"] for item in discovery.manifests], ["good-skill"])
+            self.assertEqual([item.name for item in discovery.manifests], ["good-skill"])
             self.assertEqual([item.code for item in discovery.diagnostics], ["schema_not_object"])
 
     def test_duplicate_names_are_all_rejected(self):
@@ -82,6 +82,77 @@ class TestManifests(unittest.TestCase):
             self.assertEqual(
                 [item.code for item in discovery.diagnostics],
                 ["duplicate_name", "duplicate_name"],
+            )
+
+    def test_type_array_schemas_are_discovered_and_do_not_abort_the_scan(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            union_dir = Path(tmpdir) / "union-skill"
+            union_dir.mkdir()
+            (union_dir / "manifest.json").write_text(
+                json.dumps(
+                    {
+                        "name": "union-skill",
+                        "input_schema": {
+                            "type": "object",
+                            "properties": {"note": {"type": ["string", "null"]}},
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            sibling_dir = Path(tmpdir) / "plain-skill"
+            sibling_dir.mkdir()
+            (sibling_dir / "manifest.json").write_text(
+                json.dumps({"name": "plain-skill"}), encoding="utf-8"
+            )
+
+            discovery = discover_manifests(tmpdir)
+            self.assertEqual(
+                sorted(item.name for item in discovery.manifests),
+                ["plain-skill", "union-skill"],
+            )
+            self.assertEqual(discovery.diagnostics, ())
+
+    def test_subschema_additional_properties_keeps_the_capability(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            skill_dir = Path(tmpdir) / "open-skill"
+            skill_dir.mkdir()
+            (skill_dir / "manifest.json").write_text(
+                json.dumps(
+                    {
+                        "name": "open-skill",
+                        "input_schema": {
+                            "type": "object",
+                            "additionalProperties": {"type": "string"},
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            discovery = discover_manifests(tmpdir)
+            self.assertEqual([item.name for item in discovery.manifests], ["open-skill"])
+            self.assertEqual(discovery.diagnostics, ())
+
+    def test_the_wire_form_still_serializes_to_the_manifest_on_disk(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            body = {
+                "name": "wire-skill",
+                "description": "keeps its host projection",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {"ticket_id": {"type": "string"}},
+                    "required": ["ticket_id"],
+                },
+            }
+            skill_dir = Path(tmpdir) / "wire-skill"
+            skill_dir.mkdir()
+            (skill_dir / "manifest.json").write_text(json.dumps(body), encoding="utf-8")
+
+            manifest = manifest_by_name(tmpdir)["wire-skill"]
+            self.assertEqual(
+                json.dumps(manifest.wire, sort_keys=True), json.dumps(body, sort_keys=True)
             )
 
     def test_invalid_nested_schema_shapes_are_reported(self):

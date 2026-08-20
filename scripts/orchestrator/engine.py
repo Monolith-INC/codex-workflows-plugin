@@ -69,9 +69,10 @@ class OrchestratorEngine:
     def list_tools(self) -> list[dict[str, Any]]:
         return [
             {
-                "name": manifest.get("name"),
-                "description": manifest.get("description"),
-                "inputSchema": manifest.get("input_schema") or {"type": "object", "properties": {}},
+                "name": manifest.name,
+                "description": manifest.description,
+                "inputSchema": manifest.wire.get("input_schema")
+                or {"type": "object", "properties": {}},
             }
             for manifest in self._manifests.values()
         ]

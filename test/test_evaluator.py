@@ -5,10 +5,11 @@ from scripts.orchestrator.evaluator import (
     legacy_semantic_evaluator,
     skill_validation_critiques,
 )
+from test.manifest_fixtures import capability
 
 class TestEvaluator(unittest.TestCase):
     def setUp(self):
-        self.manifest = {
+        self.manifest = capability({
             "name": "start-ticket",
             "output_signature": {
                 "type": "object",
@@ -22,7 +23,7 @@ class TestEvaluator(unittest.TestCase):
                     }
                 }
             }
-        }
+        })
 
     def test_evaluate_valid_output(self):
         valid_output = {
@@ -53,25 +54,25 @@ class TestEvaluator(unittest.TestCase):
         self.assertIn("should be a boolean", critique_texts)
 
     def test_evaluate_integer_rejects_boolean(self):
-        manifest = {
+        manifest = capability({
             "name": "count-skill",
             "output_signature": {
                 "type": "object",
                 "properties": {"count": {"type": "integer"}},
             },
-        }
+        })
         critiques = evaluate_output({"count": True}, manifest)
         self.assertEqual(len(critiques), 1)
         self.assertIn("should be an integer", critiques[0])
 
     def test_evaluate_number_rejects_boolean(self):
-        manifest = {
+        manifest = capability({
             "name": "ratio-skill",
             "output_signature": {
                 "type": "object",
                 "properties": {"ratio": {"type": "number"}},
             },
-        }
+        })
         critiques = evaluate_output({"ratio": True}, manifest)
         self.assertEqual(len(critiques), 1)
         self.assertIn("should be a number", critiques[0])
@@ -91,7 +92,7 @@ class TestEvaluator(unittest.TestCase):
             "mode": "instructions",
             "critiques": "Draft contains placeholder tokens",
         }
-        manifest = {
+        manifest = capability({
             "name": "write-spec",
             "output_signature": {
                 "type": "object",
@@ -104,7 +105,7 @@ class TestEvaluator(unittest.TestCase):
                     "critiques": {"type": "string"},
                 },
             },
-        }
+        })
         self.assertEqual(evaluate_output(output, manifest), [])
         self.assertEqual(skill_validation_critiques(output), ["Draft contains placeholder tokens"])
         self.assertEqual(collect_critiques(output, manifest), ["Draft contains placeholder tokens"])
@@ -116,7 +117,7 @@ class TestEvaluator(unittest.TestCase):
     def test_legacy_semantics_are_an_explicit_compatibility_adapter(self):
         output = {"mode": "instructions", "critiques": "first; second"}
         self.assertEqual(
-            legacy_semantic_evaluator(output, self.manifest), ["first", "second"]
+            legacy_semantic_evaluator(output, self.manifest.wire), ["first", "second"]
         )
 
     def test_custom_semantic_evaluator_receives_output_and_manifest(self):
@@ -133,7 +134,7 @@ class TestEvaluator(unittest.TestCase):
             ),
             ["custom critique"],
         )
-        self.assertEqual(observed, [(output, self.manifest)])
+        self.assertEqual(observed, [(output, self.manifest.wire)])
 
     def test_structural_failure_short_circuits_custom_semantics(self):
         called = []

@@ -3,16 +3,21 @@ from __future__ import annotations
 import json
 import logging
 from collections import Counter
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from .contracts import (
+    Parsed,
+    Rejected,
+    ValueContract,
+    parse_value_contract,
+)
+from .state import FrozenDict, deep_freeze
+
 
 logger = logging.getLogger(__name__)
-
-_SUPPORTED_TYPES = frozenset(
-    {"string", "boolean", "number", "integer", "object", "array"}
-)
 
 
 @dataclass(frozen=True)
@@ -25,40 +30,102 @@ class ManifestDiagnostic:
 
 
 @dataclass(frozen=True)
+class CapabilityManifest:
+    """A discovered capability, parsed once into its declared contract.
+
+    ``wire`` is the frozen image of the ``manifest.json`` body: JSON-identical
+    to the file (arrays become tuples, which serialize the same). It exists
+    solely so host dialect projections -- MCP ``inputSchema``, Anthropic and
+    OpenAI tool schemas -- can emit the JSON Schema those hosts expect. Nothing
+    may re-derive a rule from it; the rules live in ``inputs`` and ``outputs``.
+    """
+
+    name: str
+    description: str
+    inputs: ValueContract
+    outputs: ValueContract
+    wire: Mapping[str, Any] = field(default_factory=FrozenDict)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "wire", deep_freeze(self.wire))
+
+
+@dataclass(frozen=True)
+class ManifestParsed:
+    manifest: CapabilityManifest
+
+
+@dataclass(frozen=True)
+class ManifestRejected:
+    diagnostics: tuple[ManifestDiagnostic, ...]
+
+
+ManifestParse = ManifestParsed | ManifestRejected
+
+
+@dataclass(frozen=True)
 class ManifestDiscovery:
     """Valid manifests and deterministic diagnostics from one filesystem scan."""
 
-    manifests: tuple[dict[str, Any], ...] = ()
+    manifests: tuple[CapabilityManifest, ...] = ()
     diagnostics: tuple[ManifestDiagnostic, ...] = ()
 
 
-def validate_manifest(data: Any, path: str | Path) -> tuple[ManifestDiagnostic, ...]:
-    """Validate the manifest subset consumed by the orchestrator."""
+def parse_manifest(data: Any, path: str | Path) -> ManifestParse:
+    """Parse one raw manifest body into a capability or into diagnostics."""
     manifest_path = Path(path)
-    issues: list[ManifestDiagnostic] = []
 
-    def reject(code: str, message: str) -> None:
-        issues.append(ManifestDiagnostic(manifest_path, code, message))
+    def reject(code: str, message: str) -> ManifestDiagnostic:
+        return ManifestDiagnostic(manifest_path, code, message)
 
     if not isinstance(data, dict):
-        reject("root_not_object", "Manifest root must be an object.")
-        return tuple(issues)
+        return ManifestRejected((reject("root_not_object", "Manifest root must be an object."),))
+
+    diagnostics: tuple[ManifestDiagnostic, ...] = ()
 
     name = data.get("name")
     if not isinstance(name, str) or not name.strip():
-        reject("invalid_name", "Manifest name must be a non-empty string.")
+        diagnostics += (reject("invalid_name", "Manifest name must be a non-empty string."),)
 
     description = data.get("description")
     if description is not None and not isinstance(description, str):
-        reject("invalid_description", "Manifest description must be a string.")
+        diagnostics += (reject("invalid_description", "Manifest description must be a string."),)
 
-    for field in ("input_schema", "output_signature"):
-        schema = data.get(field)
-        if schema is None:
-            continue
-        issues.extend(_validate_schema(schema, manifest_path, field))
+    contracts: dict[str, ValueContract] = {}
+    for field_name in ("input_schema", "output_signature"):
+        match parse_value_contract(data.get(field_name), field_name):
+            case Parsed(contract):
+                contracts[field_name] = contract
+            case Rejected(issues):
+                diagnostics += tuple(
+                    reject(issue.code, issue.message) for issue in issues
+                )
+            case unexpected:  # pragma: no cover - exhaustiveness guard
+                raise AssertionError(f"non-exhaustive ParseResult: {unexpected!r}")
 
-    return tuple(issues)
+    if diagnostics:
+        return ManifestRejected(diagnostics)
+
+    return ManifestParsed(
+        CapabilityManifest(
+            name=str(name),
+            description=description or "",
+            inputs=contracts["input_schema"],
+            outputs=contracts["output_signature"],
+            wire=data,
+        )
+    )
+
+
+def validate_manifest(data: Any, path: str | Path) -> tuple[ManifestDiagnostic, ...]:
+    """Diagnostics-only projection of :func:`parse_manifest`."""
+    match parse_manifest(data, path):
+        case ManifestParsed():
+            return ()
+        case ManifestRejected(diagnostics):
+            return diagnostics
+        case unexpected:  # pragma: no cover - exhaustiveness guard
+            raise AssertionError(f"non-exhaustive ManifestParse: {unexpected!r}")
 
 
 def discover_manifests(skills_dir: str | Path) -> ManifestDiscovery:
@@ -67,7 +134,7 @@ def discover_manifests(skills_dir: str | Path) -> ManifestDiscovery:
     if not base_path.is_dir():
         return ManifestDiscovery()
 
-    candidates: list[tuple[Path, dict[str, Any]]] = []
+    candidates: list[tuple[Path, CapabilityManifest]] = []
     diagnostics: list[ManifestDiagnostic] = []
 
     for skill_path in sorted(base_path.iterdir()):
@@ -97,30 +164,44 @@ def discover_manifests(skills_dir: str | Path) -> ManifestDiscovery:
             )
             continue
 
-        issues = validate_manifest(data, manifest_file)
-        if issues:
-            diagnostics.extend(issues)
-            continue
-        candidates.append((manifest_file, data))
-
-    name_counts = Counter(data["name"] for _, data in candidates)
-    manifests: list[dict[str, Any]] = []
-    for path, data in candidates:
-        if name_counts[data["name"]] > 1:
+        try:
+            parse = parse_manifest(data, manifest_file)
+        except Exception as exc:  # pragma: no cover - parser defect containment
             diagnostics.append(
                 ManifestDiagnostic(
-                    path,
-                    "duplicate_name",
-                    f"Capability name '{data['name']}' is declared more than once.",
+                    manifest_file,
+                    "parser_error",
+                    f"Manifest parser raised {type(exc).__name__}: {exc}.",
                 )
             )
             continue
-        manifests.append(data)
+
+        match parse:
+            case ManifestParsed(manifest):
+                candidates.append((manifest_file, manifest))
+            case ManifestRejected(issues):
+                diagnostics.extend(issues)
+            case unexpected:  # pragma: no cover - exhaustiveness guard
+                raise AssertionError(f"non-exhaustive ManifestParse: {unexpected!r}")
+
+    name_counts = Counter(manifest.name for _, manifest in candidates)
+    manifests: list[CapabilityManifest] = []
+    for manifest_path, manifest in candidates:
+        if name_counts[manifest.name] > 1:
+            diagnostics.append(
+                ManifestDiagnostic(
+                    manifest_path,
+                    "duplicate_name",
+                    f"Capability name '{manifest.name}' is declared more than once.",
+                )
+            )
+            continue
+        manifests.append(manifest)
 
     return ManifestDiscovery(tuple(manifests), tuple(diagnostics))
 
 
-def read_manifests(skills_dir: str | Path) -> list[dict[str, Any]]:
+def read_manifests(skills_dir: str | Path) -> list[CapabilityManifest]:
     """Compatibility view of the valid manifests discovered under ``skills_dir``."""
     discovery = discover_manifests(skills_dir)
     for diagnostic in discovery.diagnostics:
@@ -133,8 +214,8 @@ def read_manifests(skills_dir: str | Path) -> list[dict[str, Any]]:
     return list(discovery.manifests)
 
 
-def manifest_by_name(skills_dir: str | Path) -> dict[str, dict[str, Any]]:
-    return {manifest["name"]: manifest for manifest in read_manifests(skills_dir)}
+def manifest_by_name(skills_dir: str | Path) -> dict[str, CapabilityManifest]:
+    return {manifest.name: manifest for manifest in read_manifests(skills_dir)}
 
 
 def load_skill_instructions(skills_dir: str | Path, skill_name: str) -> str:
@@ -142,65 +223,3 @@ def load_skill_instructions(skills_dir: str | Path, skill_name: str) -> str:
     if not skill_md.is_file():
         raise FileNotFoundError(f"Missing SKILL.md for skill '{skill_name}'")
     return skill_md.read_text(encoding="utf-8")
-
-
-def _validate_schema(
-    schema: Any, path: Path, field: str
-) -> tuple[ManifestDiagnostic, ...]:
-    issues: list[ManifestDiagnostic] = []
-
-    def reject(code: str, message: str) -> None:
-        issues.append(ManifestDiagnostic(path, code, message))
-
-    if not isinstance(schema, dict):
-        reject("schema_not_object", f"{field} must be an object.")
-        return tuple(issues)
-
-    schema_type = schema.get("type", "object")
-    if schema_type not in _SUPPORTED_TYPES:
-        reject(
-            "unsupported_schema_type",
-            f"{field}.type '{schema_type}' is not supported.",
-        )
-
-    required = schema.get("required", [])
-    if not isinstance(required, list) or not all(
-        isinstance(item, str) and item for item in required
-    ):
-        reject(
-            "invalid_required",
-            f"{field}.required must be a list of non-empty strings.",
-        )
-
-    properties = schema.get("properties", {})
-    if not isinstance(properties, dict):
-        reject("invalid_properties", f"{field}.properties must be an object.")
-    else:
-        for name, property_schema in properties.items():
-            if not isinstance(name, str) or not name:
-                reject(
-                    "invalid_property_name",
-                    f"{field} property names must be non-empty strings.",
-                )
-                continue
-            if not isinstance(property_schema, dict):
-                reject(
-                    "invalid_property_schema",
-                    f"{field}.properties.{name} must be an object.",
-                )
-                continue
-            property_type = property_schema.get("type")
-            if property_type is not None and property_type not in _SUPPORTED_TYPES:
-                reject(
-                    "unsupported_property_type",
-                    f"{field}.properties.{name}.type '{property_type}' is not supported.",
-                )
-
-    additional = schema.get("additionalProperties", True)
-    if not isinstance(additional, bool):
-        reject(
-            "invalid_additional_properties",
-            f"{field}.additionalProperties must be a boolean when present.",
-        )
-
-    return tuple(issues)
