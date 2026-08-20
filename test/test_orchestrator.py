@@ -85,6 +85,42 @@ class TestOrchestratorReducers(unittest.TestCase):
         state = reduce_queue_state(state, event_complete)
         self.assertEqual(state.tasks["task_b"].state, TaskState.BLOCKED)
 
+    def test_unrelated_completion_does_not_unblock_dependency_free_task(self):
+        state = QueueState(
+            tasks={
+                "task_a": Task(id="task_a", skill_name="parse_ast", state=TaskState.IN_PROGRESS),
+                "held": Task(id="held", skill_name="write_test", state=TaskState.BLOCKED),
+            }
+        )
+        event_complete = Event(type="TaskCompletedEvent", payload={"task_id": "task_a", "output": "done"})
+        state = reduce_queue_state(state, event_complete)
+        self.assertEqual(
+            state.tasks["held"].state,
+            TaskState.BLOCKED,
+            "A task blocked without dependencies must not be released by an unrelated completion",
+        )
+
+    def test_completion_only_unblocks_its_own_dependents(self):
+        state = QueueState(
+            tasks={
+                "task_a": Task(id="task_a", skill_name="parse_ast", state=TaskState.IN_PROGRESS),
+                "task_b": Task(id="task_b", skill_name="other", state=TaskState.COMPLETED),
+                "dependent": Task(
+                    id="dependent",
+                    skill_name="write_test",
+                    state=TaskState.BLOCKED,
+                    dependencies=["task_b"],
+                ),
+            }
+        )
+        event_complete = Event(type="TaskCompletedEvent", payload={"task_id": "task_a", "output": "done"})
+        state = reduce_queue_state(state, event_complete)
+        self.assertEqual(
+            state.tasks["dependent"].state,
+            TaskState.BLOCKED,
+            "Completing task_a must not release a task that does not depend on it",
+        )
+
     def test_nested_state_is_immutable_and_json_serializable(self):
         source_inputs = {"nested": {"items": ["first"]}}
         source_output = {"nested": {"items": ["result"]}}

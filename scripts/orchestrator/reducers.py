@@ -34,6 +34,8 @@ def handle_task_completed(
     for task_id, candidate in list(new_tasks.items()):
         if candidate.state is not TaskState.BLOCKED:
             continue
+        if task.id not in candidate.dependencies:
+            continue
         if all(
             dependency in new_tasks
             and new_tasks[dependency].state is TaskState.COMPLETED
