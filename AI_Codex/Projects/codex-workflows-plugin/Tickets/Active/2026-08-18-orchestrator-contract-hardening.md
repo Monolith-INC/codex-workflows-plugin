@@ -219,9 +219,58 @@ convert into progress.
 Each fix was checked against a temporary revert of itself: the first two fail
 their tests, and removing the approval cap hangs the suite.
 
+### Contract Hygiene
+
+Follow-ups raised on review of the branch itself.
+
+- **Failures are classified by type, not message.** The retry loop compared the
+  previous error's `str()` to this one's, conflating unrelated failures that
+  render the same sentence. `SkillFailure` now roots a taxonomy
+  (`HandlerContractError`, `InputContractError`, `PolicyDenied`,
+  `SkillAssetMissing`), each keeping the builtin base it replaces so existing
+  `except` clauses still work, and `classify` pattern-matches it into
+  `Fatal | Deterministic | Transient`. Unclassified failures are assumed
+  transient and keep their budget -- wasting work is recoverable, aborting a
+  viable run is not. `start-ticket`'s policy denial ran its handler 3 times
+  before this branch, 2 with the string comparison, and 1 now.
+- **Freezing preserves JSON shape.** `deep_freeze` turned every sequence into a
+  tuple, so `manifest.wire["required"] == ["ticket_id"]` was False for identical
+  content. Lists now freeze into `FrozenList`; the declared tuple fields coerce
+  their own type instead of relying on the freezer.
+- **Exhaustiveness is checked, not asserted.** The fourteen
+  `case unexpected: raise AssertionError` guards became `assert_never`, and CI
+  runs mypy over `scripts/orchestrator` with `disallow_untyped_defs`,
+  `warn_unused_ignores`, `strict_equality` and friends. Proven by deleting one
+  arm of the `ExtraProperties` match and watching the checker point at the
+  omission. The first run found two real defects: a capture name reused across
+  two matches over different sum types, and a redefined local.
+
+`scripts/mypy.ini` sits under `scripts/` rather than at the repository root
+because the checkout root is not writable by the account that added it. Moving
+it to `./mypy.ini` removes the `--config-file` flag from CI.
+
+### Open Question
+
+Stall detection compares the handler's `product`, so a product field that
+changes between attempts without representing progress disables the fast-fail
+entirely -- the same failure mode as the old top-level denylist, relocated.
+Measured: a handler with one growing undeclared field runs 25 times where the
+same handler with a stable product runs 2. Nothing enforces the invariant that
+non-progress data stays out of the product.
+
+`write-spec` is exposed to this in principle: its handler returns `mistakes`,
+which `append_mistake` grows when the reflection engine blocks. It converges at
+2 invocations today because the block happens at reflection attempt 3 and the
+stall fires first, but that is an observation about ordering, not a guarantee.
+
+Worth noting that 8 of the 13 shipped manifests declare fewer output properties
+than their handler returns, and 6 declare none at all -- so projecting the
+comparison onto the declared `output_signature` is available as a fix, at the
+cost of making stall detection critique-only for those 6.
+
 ### Still Open
 
-None.
+The open question above. No known defects.
 
 ## Verification
 
