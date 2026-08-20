@@ -503,6 +503,43 @@ class TestOrchestratorEngineE2E(unittest.TestCase):
         )
         self.assertEqual(invocations, 25)
 
+    def test_a_recorded_mistake_cannot_mask_a_write_spec_stall(self):
+        """`mistakes` grows mid-run and is undeclared, so it is not progress."""
+        repo_skills = Path(__file__).parent.parent / "skills"
+        write_spec_dir = self.skills_dir / "write-spec"
+        write_spec_dir.mkdir(parents=True)
+        for name in ("manifest.json", "SKILL.md"):
+            (write_spec_dir / name).write_text(
+                (repo_skills / "write-spec" / name).read_text(), encoding="utf-8"
+            )
+
+        sizes = []
+        real = handlers.handle_write_spec
+
+        def watching(invocation):
+            result = real(invocation)
+            sizes.append(len(result.product.get("mistakes", [])))
+            return result
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.dict(os.environ, {"CODEX_PROJECT_ROOT": tmp}):
+                with mock.patch.dict(handlers._HANDLERS, {"write-spec": watching}):
+                    engine = OrchestratorEngine(self.skills_dir, max_retries=50)
+                    result = engine.run_tool_call(
+                        "write-spec",
+                        {
+                            "ticket_id": "T-1",
+                            "spec_kind": "tech-spec",
+                            "draft_content": "TODO: fill this in later",
+                            "max_attempts": 1,
+                        },
+                    )
+
+        self.assertEqual(sizes, [0, 1], "the mistakes list must grow between attempts")
+        self.assertEqual(len(sizes), 2, "the growth must not postpone the halt")
+        self.assertFalse(result.ok)
+        self.assertEqual(result.state, "Blocked_Requires_Review")
+
     def test_an_operator_approval_resumes_a_halted_run(self):
         stalled = {"mode": "instructions", "critiques": "identical every time"}
         scripted = [stalled, stalled, {"mode": "completed"}]

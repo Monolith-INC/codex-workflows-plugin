@@ -144,6 +144,26 @@ class TestProgressSignature(unittest.TestCase):
             DeclaredFields({"ticket_id": "T-1"}),
         )
 
+    def test_a_contract_naming_absent_fields_keeps_the_conservative_comparison(self):
+        """Declaring fields a result does not carry is no basis to narrow by."""
+        contract = parse(
+            {
+                "type": "object",
+                "properties": {"feature_branch": {"type": "string"}},
+            }
+        )
+        self.assertEqual(
+            progress_signature({"mode": "instructions", "skill": "x"}, contract),
+            WholeProduct({"mode": "instructions", "skill": "x"}),
+        )
+
+    def test_a_declared_field_appearing_later_is_progress(self):
+        contract = parse({"type": "object", "properties": {"path": {"type": "string"}}})
+        self.assertNotEqual(
+            progress_signature({"mode": "drafting"}, contract),
+            progress_signature({"mode": "drafting", "path": "out.md"}, contract),
+        )
+
     def test_declaring_nothing_keeps_the_conservative_comparison(self):
         """Without a contract there is no basis to narrow, so nothing is narrowed."""
         for contract in (parse({"type": "object", "properties": {}}), parse(None)):

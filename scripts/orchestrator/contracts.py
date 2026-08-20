@@ -472,19 +472,21 @@ def progress_signature(
 
     A manifest that declares an output signature has already said which fields
     carry its result, so that declaration is the basis. A manifest that declares
-    nothing gives no basis to narrow, and keeps the conservative whole-result
-    comparison: an undetected stall wastes a retry budget, while a wrongly
-    detected one halts work that was still moving.
+    nothing -- or that names only fields this result does not carry -- gives no
+    basis to narrow, and keeps the conservative whole-result comparison: an
+    undetected stall wastes a retry budget, while a wrongly detected one halts
+    work that was still moving.
     """
     match contract:
         case Unconstrained():
             return WholeProduct(product)
         case ObjectContract(properties, required, _):
             declared = frozenset(properties) | frozenset(required)
-            if not declared:
+            present = {key: value for key, value in product.items() if key in declared}
+            if not present:
+                # The contract named nothing this result actually carries, so it
+                # offers no basis to narrow by -- same position as no contract.
                 return WholeProduct(product)
-            return DeclaredFields(
-                {key: value for key, value in product.items() if key in declared}
-            )
+            return DeclaredFields(present)
         case _ as unmatched:
             assert_never(unmatched)
