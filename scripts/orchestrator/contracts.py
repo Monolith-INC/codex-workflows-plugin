@@ -21,7 +21,8 @@ from enum import Enum
 from typing import Any
 
 from .exhaustive import assert_never
-from .state import FrozenDict
+from .exhaustive import assert_never
+from .state import FrozenDict, deep_freeze
 
 
 class JsonType(Enum):
@@ -431,3 +432,59 @@ def _with_article(name: str, subject: Subject) -> str:
     if not subject.use_article:
         return name
     return f"{_ARTICLES.get(JsonType(name), 'a')} {name}"
+
+
+# --- What counts as progress between attempts ------------------------------
+
+
+@dataclass(frozen=True)
+class WholeProduct:
+    """No declared output fields, so every value the handler returned counts."""
+
+    values: Mapping[str, Any] = field(default_factory=FrozenDict)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "values", deep_freeze(self.values))
+
+
+@dataclass(frozen=True)
+class DeclaredFields:
+    """Only the fields the manifest committed to in its output signature."""
+
+    values: Mapping[str, Any] = field(default_factory=FrozenDict)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "values", deep_freeze(self.values))
+
+
+ProgressSignature = WholeProduct | DeclaredFields
+
+
+def progress_signature(
+    product: Mapping[str, Any], contract: ValueContract
+) -> ProgressSignature:
+    """Project a result onto the fields that can evidence progress.
+
+    Comparing whole results made stall detection depend on handlers keeping
+    non-progress data out of them -- an invariant nothing enforced, and the same
+    failure mode as the field denylist it replaced: one incidental value that
+    differs per attempt silently disables the check.
+
+    A manifest that declares an output signature has already said which fields
+    carry its result, so that declaration is the basis. A manifest that declares
+    nothing gives no basis to narrow, and keeps the conservative whole-result
+    comparison: an undetected stall wastes a retry budget, while a wrongly
+    detected one halts work that was still moving.
+    """
+    match contract:
+        case Unconstrained():
+            return WholeProduct(product)
+        case ObjectContract(properties, required, _):
+            declared = frozenset(properties) | frozenset(required)
+            if not declared:
+                return WholeProduct(product)
+            return DeclaredFields(
+                {key: value for key, value in product.items() if key in declared}
+            )
+        case _ as unmatched:
+            assert_never(unmatched)

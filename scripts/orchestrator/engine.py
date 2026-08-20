@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from .contracts import ProgressSignature, progress_signature
 from .exhaustive import assert_never
 from .evaluator import SemanticEvaluator, collect_critiques, legacy_semantic_evaluator
 from .hooks import authorization_hook, cli_ui_hook
@@ -20,14 +21,32 @@ from .worker import execute_skill
 
 
 @dataclass(frozen=True)
-class RetryContext:
-    """What the previous attempt produced, for stall detection."""
+class NoPreviousAttempt:
+    """Nothing has been produced yet, so nothing can have stalled."""
 
-    signature: Any = None
-    critiques: tuple[str, ...] = ()
 
-    def matches(self, signature: Any, critiques: Sequence[str]) -> bool:
-        return self.critiques == tuple(critiques) and self.signature == signature
+@dataclass(frozen=True)
+class PreviousAttempt:
+    """The last attempt, projected onto the fields its contract declared."""
+
+    signature: ProgressSignature
+    critiques: tuple[str, ...]
+
+
+RetryContext = NoPreviousAttempt | PreviousAttempt
+
+
+def _stalled(
+    context: RetryContext, signature: ProgressSignature, critiques: Sequence[str]
+) -> bool:
+    """True when this attempt reproduced the previous one exactly."""
+    match context:
+        case NoPreviousAttempt():
+            return False
+        case PreviousAttempt(previous, complaints):
+            return previous == signature and complaints == tuple(critiques)
+        case _ as unmatched_context:
+            assert_never(unmatched_context)
 
 
 @dataclass(frozen=True)
@@ -138,7 +157,7 @@ class OrchestratorEngine:
         self._subscribe_hooks(stream)
         stream.dispatch(Event(type="TaskSpawnedEvent", payload={"task_id": task_id}))
 
-        context = RetryContext()
+        context: RetryContext = NoPreviousAttempt()
 
         while True:
             current = stream.state.tasks[task_id]
@@ -167,7 +186,7 @@ class OrchestratorEngine:
                     raised = {**raised, "halt": True}
                 stream.dispatch(Event(type="TaskFailedEvent", payload=raised))
                 # A raise produced no result, so the comparison sequence restarts.
-                context = RetryContext()
+                context = NoPreviousAttempt()
 
                 match _next_step(stream.state.tasks[task_id], self.max_retries):
                     case Retry():
@@ -200,7 +219,8 @@ class OrchestratorEngine:
                 )
                 return ToolCallResult(ok=True, output=output, task_id=task_id, state=TaskState.COMPLETED.value)
 
-            stalled = context.matches(run.product, critiques)
+            signature = progress_signature(run.product, manifest.outputs)
+            stalled = _stalled(context, signature, critiques)
             failure: dict[str, Any] = {
                 "task_id": task_id,
                 "critique": "; ".join(critiques),
@@ -212,9 +232,9 @@ class OrchestratorEngine:
             # A stall that an operator then approves must not re-detect itself on
             # the next attempt, or the approval would be a no-op.
             context = (
-                RetryContext()
+                NoPreviousAttempt()
                 if stalled
-                else RetryContext(run.product, tuple(critiques))
+                else PreviousAttempt(signature, tuple(critiques))
             )
 
             match _next_step(stream.state.tasks[task_id], self.max_retries):

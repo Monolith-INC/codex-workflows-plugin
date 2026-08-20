@@ -12,8 +12,11 @@ from scripts.orchestrator.contracts import (
     Rejected,
     RejectExtras,
     Unconstrained,
+    WholeProduct,
+    DeclaredFields,
     check_value,
     parse_value_contract,
+    progress_signature,
 )
 
 
@@ -104,6 +107,55 @@ class TestExtraProperties(unittest.TestCase):
             diagnostics({"type": "object", "additionalProperties": "no"}),
             ("invalid_additional_properties",),
         )
+
+
+class TestProgressSignature(unittest.TestCase):
+    """What may be treated as evidence of progress is declared, not guessed."""
+
+    def test_a_declared_contract_narrows_to_its_own_fields(self):
+        contract = parse(
+            {"type": "object", "required": ["mode"], "properties": {"mode": {"type": "string"}}}
+        )
+        signature = progress_signature(
+            {"mode": "instructions", "incidental": [1, 2, 3]}, contract
+        )
+        self.assertEqual(signature, DeclaredFields({"mode": "instructions"}))
+
+    def test_an_undeclared_field_cannot_masquerade_as_progress(self):
+        contract = parse(
+            {"type": "object", "properties": {"mode": {"type": "string"}}}
+        )
+        first = progress_signature({"mode": "instructions", "log": ["a"]}, contract)
+        second = progress_signature({"mode": "instructions", "log": ["a", "b"]}, contract)
+        self.assertEqual(first, second)
+
+    def test_a_declared_field_still_registers_as_progress(self):
+        contract = parse(
+            {"type": "object", "properties": {"mode": {"type": "string"}}}
+        )
+        first = progress_signature({"mode": "drafting"}, contract)
+        second = progress_signature({"mode": "completed"}, contract)
+        self.assertNotEqual(first, second)
+
+    def test_required_fields_count_even_when_not_in_properties(self):
+        contract = parse({"type": "object", "required": ["ticket_id"]})
+        self.assertEqual(
+            progress_signature({"ticket_id": "T-1", "noise": 1}, contract),
+            DeclaredFields({"ticket_id": "T-1"}),
+        )
+
+    def test_declaring_nothing_keeps_the_conservative_comparison(self):
+        """Without a contract there is no basis to narrow, so nothing is narrowed."""
+        for contract in (parse({"type": "object", "properties": {}}), parse(None)):
+            signature = progress_signature({"anything": 1}, contract)
+            self.assertEqual(signature, WholeProduct({"anything": 1}))
+
+    def test_the_projection_is_immutable(self):
+        contract = parse({"type": "object", "properties": {"items": {"type": "array"}}})
+        signature = progress_signature({"items": ["first"]}, contract)
+        assert isinstance(signature, DeclaredFields)
+        with self.assertRaises(TypeError):
+            signature.values["items"].append("mutation")
 
 
 class TestCheckValue(unittest.TestCase):

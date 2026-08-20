@@ -440,6 +440,69 @@ class TestOrchestratorEngineE2E(unittest.TestCase):
         self.assertEqual(prompted.call_count, 2)
         self.assertEqual(result.state, "Blocked_Requires_Review")
 
+    def _skill_declaring_mode(self, name: str) -> None:
+        self._write_skill(
+            name,
+            {
+                "name": name,
+                "description": "declares mode as its result",
+                "input_schema": {"type": "object", "properties": {}},
+                "output_signature": {
+                    "type": "object",
+                    "required": ["mode"],
+                    "properties": {"mode": {"type": "string"}},
+                },
+            },
+            f"# {name}\n",
+        )
+
+    def _run_until_settled(self, name: str, product_for) -> int:
+        calls = []
+
+        def handler(invocation):
+            calls.append(invocation.attempt)
+            return HandlerResult(product=product_for(len(calls)))
+
+        engine = OrchestratorEngine(self.skills_dir, max_retries=25)
+        with mock.patch.dict(handlers._HANDLERS, {name: handler}):
+            engine.run_tool_call(name, {})
+        return len(calls)
+
+    def test_an_undeclared_field_cannot_defeat_stall_detection(self):
+        """A value that changes without being part of the result is not progress."""
+        self._skill_declaring_mode("declared-skill")
+        invocations = self._run_until_settled(
+            "declared-skill",
+            lambda n: {
+                "mode": "instructions",
+                "critiques": "identical every time",
+                "history": list(range(n)),
+            },
+        )
+        self.assertEqual(invocations, 2)
+
+    def test_a_declared_field_advancing_keeps_the_run_going(self):
+        """The narrowing must not halt work that is still moving."""
+        self._skill_declaring_mode("advancing-skill")
+        invocations = self._run_until_settled(
+            "advancing-skill",
+            lambda n: {"mode": f"step-{n}", "critiques": "identical every time"},
+        )
+        self.assertEqual(invocations, 25)
+
+    def test_a_manifest_declaring_no_output_compares_everything(self):
+        """With no contract to narrow to, the conservative comparison stands."""
+        self._stub_skill("undeclared-skill")
+        invocations = self._run_until_settled(
+            "undeclared-skill",
+            lambda n: {
+                "mode": "instructions",
+                "critiques": "identical every time",
+                "history": list(range(n)),
+            },
+        )
+        self.assertEqual(invocations, 25)
+
     def test_an_operator_approval_resumes_a_halted_run(self):
         stalled = {"mode": "instructions", "critiques": "identical every time"}
         scripted = [stalled, stalled, {"mode": "completed"}]
