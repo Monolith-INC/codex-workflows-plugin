@@ -172,17 +172,36 @@ stall memory is one value rather than two rebinds that can drift apart.
 Each new test was checked against a temporary revert of its own fix and fails
 without it.
 
+### Output Envelope
+
+Both follow-ups noted above shared one cause: handler output was a flat dict
+mixing the work, the handler's retry bookkeeping, and the fields the worker
+appends, so anything needing one of them subtracted the others by name.
+
+- Handlers return a `HandlerResult` carrying `product` and `reflection`. The
+  worker wraps it in a `SkillOutput` with an `Envelope | NoEnvelope` for what it
+  adds itself.
+- The engine evaluates and compares `product` alone. Stall detection became a
+  projection instead of a subtraction and `_VOLATILE_OUTPUT_FIELDS` is deleted.
+- A manifest may now declare a closed `output_signature` without tripping over
+  orchestration fields it never named.
+- Flattening happens once in `SkillOutput.to_wire`, so the MCP result shape is
+  unchanged: the live `write-spec` round trip still halts after 2 invocations
+  and emits the same 13 keys.
+- A handler returning a bare dict now fails with a clear `TypeError` rather than
+  burning the retry budget on an `AttributeError`.
+
+Checked by evaluating the merged wire form instead of the product: four tests
+fail, so the split is load-bearing rather than cosmetic.
+
 ### Still Open
 
-None from the review. Follow-ups worth considering, not defects:
+None from the review.
 
-- `_VOLATILE_OUTPUT_FIELDS` is a denylist that grows whenever a handler adds an
-  orchestration field. Splitting handler output into a work product and an
-  envelope would make the stall signature a projection instead of a
-  subtraction, but it would change the MCP result shape this ticket preserves.
-- `evaluate_output` now honors `additionalProperties` on `output_signature`,
-  which no shipped manifest sets. A manifest that opted in would reject the
-  `prompt`/`attempt` fields the worker appends.
+Known and deliberate: in interactive mode an approval resets the retry budget,
+so a caller that approves unconditionally never terminates. The operator is the
+bound by design -- the hook reads stdin and EOF denies -- but if the engine ever
+gains a non-interactive approver, that path needs an explicit cap.
 
 ## Verification
 
