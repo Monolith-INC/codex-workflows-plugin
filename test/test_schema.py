@@ -1,6 +1,7 @@
 import unittest
 
 from scripts.orchestrator.schema import validate_inputs
+from test.manifest_fixtures import capability
 
 
 class TestInputSchema(unittest.TestCase):
@@ -13,12 +14,36 @@ class TestInputSchema(unittest.TestCase):
                 "required": ["pr_number"],
             },
         }
-        self.assertEqual(validate_inputs({}, manifest), ["Missing required argument 'pr_number'."])
+        self.assertEqual(validate_inputs({}, capability(manifest)), ["Missing required argument 'pr_number'."])
         self.assertEqual(
-            validate_inputs({"pr_number": 42}, manifest),
+            validate_inputs({"pr_number": 42}, capability(manifest)),
             ["Argument 'pr_number' should be string, got int."],
         )
-        self.assertEqual(validate_inputs({"pr_number": "693"}, manifest), [])
+        self.assertEqual(validate_inputs({"pr_number": "693"}, capability(manifest)), [])
+
+    def test_unknown_arguments_remain_allowed_by_default(self):
+        manifest = {
+            "name": "compatible",
+            "input_schema": {
+                "type": "object",
+                "properties": {"declared": {"type": "string"}},
+            },
+        }
+        self.assertEqual(validate_inputs({"undeclared": 1}, capability(manifest)), [])
+
+    def test_unknown_arguments_are_rejected_when_manifest_opts_in(self):
+        manifest = {
+            "name": "strict",
+            "input_schema": {
+                "type": "object",
+                "properties": {"declared": {"type": "string"}},
+                "additionalProperties": False,
+            },
+        }
+        self.assertEqual(
+            validate_inputs({"declared": "yes", "undeclared": 1}, capability(manifest)),
+            ["Unknown argument 'undeclared' is not allowed."],
+        )
 
 
 if __name__ == "__main__":
