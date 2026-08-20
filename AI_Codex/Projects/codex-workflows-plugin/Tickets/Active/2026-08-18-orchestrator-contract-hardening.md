@@ -277,7 +277,19 @@ Measured with a retry budget of 25:
 
 `write-spec` declares 5 of the 9 fields its handler returns; `mistakes` is not
 among them and can no longer mask a stall. It still settles in 2 invocations and
-still emits all 13 wire keys.
+still emits all 13 wire keys. Verified directly at `max_attempts=1`, where the
+reflection engine records a mistake mid-run and the list grows between attempts:
+2 invocations with the projection, 3 without.
+
+An empty projection falls back to `WholeProduct` as well. Two shipped manifests
+(`finish-feature-development`, `reconcile-feature-stack`) declare fields their
+instruction-only handler never returns, so narrowing produced an empty basis and
+collapsed the comparison to critique identity -- the weakening the fallback
+exists to prevent, reached through the branch meant to be safe. Across the 13
+shipped skills the basis is now `DeclaredFields` for 4 and `WholeProduct` for 9.
+
+Corrections to earlier counts in this ledger: 7 manifests declare no output
+fields, not 6; and 6 of 13 declare fields while returning undeclared extras.
 
 ### Still Open
 
