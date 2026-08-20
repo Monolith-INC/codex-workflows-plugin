@@ -194,14 +194,34 @@ appends, so anything needing one of them subtracted the others by name.
 Checked by evaluating the merged wire form instead of the product: four tests
 fail, so the split is load-bearing rather than cosmetic.
 
+### Failure Path Termination
+
+The envelope split surfaced two ways a run could spend effort it could never
+convert into progress.
+
+- **The exception branch had no stall detection**, the same gap as the output
+  branch one branch over. A deterministic raise repeated until the budget was
+  gone: `start-ticket`'s "already an active ticket" ran its handler 3 times,
+  re-deciding an identical policy question. A raise now compares through the
+  existing `RetryContext` with a `Raised` signature, so that denial runs twice.
+  A raise whose message varies still uses its whole budget.
+- **A handler protocol violation skips even the second attempt.** The worker
+  raises `HandlerContractError` and the engine halts immediately, since running
+  the same code again cannot change it. Three invocations became one.
+- **Approvals are bounded in the hook.** An approval restores the full retry
+  budget, so an approver that never declines never terminates. The count is
+  derived from the append-only event history rather than a counter, keeping the
+  bound a pure function of state. Refusing to prompt leaves the task honestly
+  BLOCKED_REQUIRES_REVIEW; capping in the engine instead would mean discarding
+  an approval already applied and reporting a state the task no longer had.
+  `max_approvals` defaults to 1 and is configurable on the engine.
+
+Each fix was checked against a temporary revert of itself: the first two fail
+their tests, and removing the approval cap hangs the suite.
+
 ### Still Open
 
-None from the review.
-
-Known and deliberate: in interactive mode an approval resets the retry budget,
-so a caller that approves unconditionally never terminates. The operator is the
-bound by design -- the hook reads stdin and EOF denies -- but if the engine ever
-gains a non-interactive approver, that path needs an explicit cap.
+None.
 
 ## Verification
 
