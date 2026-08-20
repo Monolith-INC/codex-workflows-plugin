@@ -1,6 +1,6 @@
 import json
 import unittest
-from scripts.orchestrator.state import Event, FrozenDict, QueueState, Task, TaskState
+from scripts.orchestrator.state import Event, FrozenDict, FrozenList, QueueState, Task, TaskState
 from scripts.orchestrator.reducers import reduce_queue_state
 
 class TestOrchestratorReducers(unittest.TestCase):
@@ -141,12 +141,17 @@ class TestOrchestratorReducers(unittest.TestCase):
         source_output["nested"]["items"].append("source mutation")
         source_dependencies.append("source mutation")
         source_critiques.append("source mutation")
-        self.assertEqual(task.inputs["nested"]["items"], ("first",))
-        self.assertEqual(task.output["nested"]["items"], ("result",))
+        # JSON arrays keep their shape: frozen payloads still compare equal to
+        # the documents they came from. Only the declared tuple fields are tuples.
+        self.assertEqual(task.inputs["nested"]["items"], ["first"])
+        self.assertEqual(task.output["nested"]["items"], ["result"])
         self.assertEqual(task.dependencies, ("dependency",))
         self.assertEqual(task.critiques, ("critique",))
+        self.assertEqual(task.inputs, {"nested": {"items": ["first"]}})
         with self.assertRaises(TypeError):
             task.inputs["nested"]["other"] = True
+        with self.assertRaises(TypeError):
+            task.inputs["nested"]["items"].append("mutation")
         with self.assertRaises(TypeError):
             event.payload["nested"]["value"] = 2
         with self.assertRaises(TypeError):
@@ -164,7 +169,9 @@ class TestOrchestratorReducers(unittest.TestCase):
         )
 
         nested_items.append("source mutation")
-        self.assertEqual(task.inputs["nested"], ("first",))
+        self.assertEqual(task.inputs["nested"], ["first"])
+        with self.assertRaises(TypeError):
+            task.inputs["nested"].append("mutation")
 
     def test_invalid_transition_is_a_recorded_no_op(self):
         state = QueueState(

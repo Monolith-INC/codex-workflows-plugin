@@ -155,6 +155,27 @@ class TestManifests(unittest.TestCase):
                 json.dumps(manifest.wire, sort_keys=True), json.dumps(body, sort_keys=True)
             )
 
+    def test_the_wire_form_compares_equal_to_the_manifest_on_disk(self):
+        """A frozen payload must still equal the document it came from."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            body = {
+                "name": "array-skill",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {"ticket_id": {"type": "string"}},
+                    "required": ["ticket_id"],
+                },
+            }
+            skill_dir = Path(tmpdir) / "array-skill"
+            skill_dir.mkdir()
+            (skill_dir / "manifest.json").write_text(json.dumps(body), encoding="utf-8")
+
+            manifest = manifest_by_name(tmpdir)["array-skill"]
+            self.assertEqual(manifest.wire["input_schema"]["required"], ["ticket_id"])
+            self.assertEqual(manifest.wire, body)
+            with self.assertRaises(TypeError):
+                manifest.wire["input_schema"]["required"].append("sneaky")
+
     def test_invalid_nested_schema_shapes_are_reported(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             skill_dir = Path(tmpdir) / "bad"

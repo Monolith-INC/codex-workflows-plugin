@@ -17,17 +17,46 @@ class FrozenDict(dict):
     __delitem__ = _immutable
     clear = _immutable
     pop = _immutable
-    popitem = _immutable
+    popitem = _immutable  # type: ignore[assignment]
     setdefault = _immutable
     update = _immutable
-    __ior__ = _immutable
+    __ior__ = _immutable  # type: ignore[assignment]
+
+
+class FrozenList(list):
+    """A JSON-serializable list that rejects mutation."""
+
+    @staticmethod
+    def _immutable(*args: Any, **kwargs: Any) -> None:
+        raise TypeError("FrozenList is immutable")
+
+    __setitem__ = _immutable
+    __delitem__ = _immutable
+    __iadd__ = _immutable  # type: ignore[assignment]
+    __imul__ = _immutable  # type: ignore[assignment]
+    append = _immutable
+    clear = _immutable
+    extend = _immutable
+    insert = _immutable
+    pop = _immutable
+    remove = _immutable
+    reverse = _immutable
+    sort = _immutable
 
 
 def deep_freeze(value: Any) -> Any:
-    """Recursively freeze common JSON-like containers."""
+    """Recursively freeze JSON-like containers, preserving their shape.
+
+    A JSON array stays list-shaped. Turning it into a tuple made frozen payloads
+    silently unequal to the documents they came from, so a caller comparing
+    ``manifest.wire["required"] == ["a", "b"]`` got False for identical content.
+    Sequence kind is part of the value; only mutability is taken away.
+    """
     if isinstance(value, Mapping):
         return FrozenDict({key: deep_freeze(item) for key, item in value.items()})
-    if isinstance(value, (list, tuple)):
+    if isinstance(value, list):
+        return FrozenList(deep_freeze(item) for item in value)
+    if isinstance(value, tuple):
         return tuple(deep_freeze(item) for item in value)
     if isinstance(value, (set, frozenset)):
         return frozenset(deep_freeze(item) for item in value)
@@ -68,8 +97,8 @@ class Task:
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "inputs", deep_freeze(self.inputs))
-        object.__setattr__(self, "dependencies", deep_freeze(self.dependencies))
-        object.__setattr__(self, "critiques", deep_freeze(self.critiques))
+        object.__setattr__(self, "dependencies", tuple(self.dependencies))
+        object.__setattr__(self, "critiques", tuple(self.critiques))
         object.__setattr__(self, "output", deep_freeze(self.output))
 
     def copy_with(self, **kwargs: Any) -> "Task":
@@ -86,7 +115,7 @@ class QueueState:
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "tasks", deep_freeze(self.tasks))
-        object.__setattr__(self, "events_history", deep_freeze(self.events_history))
+        object.__setattr__(self, "events_history", tuple(self.events_history))
 
     def copy_with(self, **kwargs: Any) -> "QueueState":
         """Return a new immutable queue with the requested fields replaced."""
