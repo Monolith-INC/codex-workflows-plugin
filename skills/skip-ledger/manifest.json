@@ -1,8 +1,0 @@
-{
-  "name": "skip-ledger",
-  "version": "1.0.0",
-  "description": "Ignore workflow ledger hooks until /resume-ledger.",
-  "input_schema": { "type": "object", "properties": {} },
-  "output_signature": { "type": "object", "properties": {} },
-  "tools": []
-}

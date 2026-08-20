@@ -1,6 +1,5 @@
 ---
-name: start-ticket
-description: Start a ticket by creating the active ledger and session record.
+description: Start a configured tracker work item and plan specification artifacts.
 ---
 
-Create or update the active ticket ledger and session record for a new work item.
+Invoke the start-ticket skill through the orchestrator.

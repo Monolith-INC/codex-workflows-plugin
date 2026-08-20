@@ -1,27 +1,10 @@
 ---
 name: start-ticket
-description: Start a ticket by creating the active ledger, session record, and required specs.
+description: Start a configured tracker work item and plan its specification artifacts.
 ---
 
-# start-ticket
+# Start ticket
 
-Create or update the active ticket ledger and session record for a new work item.
+Fetch the work item through the configured tracker adapter, confirm the current branch matches the bootstrap-selected {key} convention, and request the logical in_progress transition. Return generic work-item identity, provider state, child items, and the specification artifact plan. Durable state belongs in the tracker; do not create local workflow records.
 
-## Spec generation hook
-
-After activating the ticket, the runtime checks `<vault>/Specs/<ticket-slug>/` for required spec files.
-
-**Given** a ticket to be implemented  
-**When** `/start-ticket` is issued  
-**If** corresponding spec files are missing  
-**Then** initiate `/write-spec` for each missing kind before any code changes.
-
-The orchestrator returns `write_spec_directive` with `missing_kinds` and `source_hints` extracted from the ticket ledger (requirements, description, implementation plan).
-
-Required spec kinds depend on ticket signal:
-- **bugfix** → `bugfix-spec`, `adr`
-- **feature** → `design-doc`, `tech-spec`
-- **task** → `implementation-plan`, `tech-spec`
-- **default** → `tech-spec`, `implementation-plan`
-
-Consult `skills/write-spec/SKILL.md` for the Actor-Critic workflow.
+If required specifications are missing, invoke write-spec and publish resulting artifacts through the integration gateway before implementation writes.

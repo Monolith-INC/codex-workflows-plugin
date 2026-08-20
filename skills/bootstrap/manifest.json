@@ -1,7 +1,7 @@
 {
   "name": "bootstrap",
   "version": "1.0.0",
-  "description": "Initialize a repository-local session and ledger.",
+  "description": "Select and configure tracker, SCM, provider mappings, and branch conventions.",
   "input_schema": {
     "type": "object",
     "properties": {}

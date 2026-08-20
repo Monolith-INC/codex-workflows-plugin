@@ -1,13 +1,13 @@
 {
   "name": "start-ticket",
   "version": "1.1.0",
-  "description": "Start a ticket by creating the active ledger and session record.",
+  "description": "Start a tracker work item and return the specification and branch actions required before implementation.",
   "input_schema": {
     "type": "object",
     "properties": {
       "ticket_id": {
         "type": "string",
-        "description": "The ID of the ticket to start (e.g., from YouTrack)."
+        "description": "The provider work-item identifier."
       }
     },
     "required": [
@@ -16,13 +16,10 @@
   },
   "output_signature": {
     "type": "object",
-    "required": ["active_ledger_path", "ticket_id", "mode"],
+    "required": ["ticket_id", "transition_required", "mode"],
     "properties": {
-      "active_ledger_path": {
-        "type": "string",
-        "description": "The file path to the newly created active ledger."
-      },
       "ticket_id": { "type": "string" },
+      "transition_required": { "type": "string" },
       "mode": { "type": "string" },
       "generation_required": { "type": "boolean" }
     }
