@@ -4,6 +4,7 @@ import unittest
 from pathlib import Path
 
 from scripts.orchestrator.manifests import (
+    capabilities_by_name,
     discover_manifests,
     manifest_by_name,
     read_manifests,
@@ -46,7 +47,7 @@ class TestManifests(unittest.TestCase):
 
             manifests = read_manifests(tmpdir)
             self.assertEqual(len(manifests), 1)
-            self.assertEqual(manifest_by_name(tmpdir)["good-skill"].name, "good-skill")
+            self.assertEqual(manifest_by_name(tmpdir)["good-skill"]["name"], "good-skill")
 
     def test_malformed_schema_is_isolated_with_a_diagnostic(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -150,7 +151,7 @@ class TestManifests(unittest.TestCase):
             skill_dir.mkdir()
             (skill_dir / "manifest.json").write_text(json.dumps(body), encoding="utf-8")
 
-            manifest = manifest_by_name(tmpdir)["wire-skill"]
+            manifest = capabilities_by_name(tmpdir)["wire-skill"]
             self.assertEqual(
                 json.dumps(manifest.wire, sort_keys=True), json.dumps(body, sort_keys=True)
             )
@@ -170,11 +171,99 @@ class TestManifests(unittest.TestCase):
             skill_dir.mkdir()
             (skill_dir / "manifest.json").write_text(json.dumps(body), encoding="utf-8")
 
-            manifest = manifest_by_name(tmpdir)["array-skill"]
+            manifest = capabilities_by_name(tmpdir)["array-skill"]
             self.assertEqual(manifest.wire["input_schema"]["required"], ["ticket_id"])
             self.assertEqual(manifest.wire, body)
             with self.assertRaises(TypeError):
                 manifest.wire["input_schema"]["required"].append("sneaky")
+
+    def test_the_compatibility_wrappers_still_return_manifest_bodies(self):
+        """The accepted spec fixes these shapes; the typed API is separate."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            body = {"name": "dict-skill", "description": "still a dict", "version": "2.0.0"}
+            skill_dir = Path(tmpdir) / "dict-skill"
+            skill_dir.mkdir()
+            (skill_dir / "manifest.json").write_text(json.dumps(body), encoding="utf-8")
+
+            listed = read_manifests(tmpdir)
+            self.assertIsInstance(listed[0], dict)
+            self.assertEqual(listed[0].get("version"), "2.0.0")
+            self.assertEqual(listed[0]["name"], "dict-skill")
+
+            keyed = manifest_by_name(tmpdir)
+            self.assertIsInstance(keyed["dict-skill"], dict)
+            self.assertEqual(keyed["dict-skill"], body)
+
+            self.assertEqual(capabilities_by_name(tmpdir)["dict-skill"].name, "dict-skill")
+
+    def test_the_wrappers_feed_the_host_tool_adapters(self):
+        """The shapes exist so host dialect projections keep accepting them."""
+        from scripts.orchestrator.adapters import to_anthropic_tool, to_openai_tool
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            skill_dir = Path(tmpdir) / "tool-skill"
+            skill_dir.mkdir()
+            (skill_dir / "manifest.json").write_text(
+                json.dumps(
+                    {
+                        "name": "tool-skill",
+                        "description": "projected to hosts",
+                        "input_schema": {"type": "object", "properties": {}},
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            manifest = manifest_by_name(tmpdir)["tool-skill"]
+            self.assertEqual(to_anthropic_tool(manifest)["name"], "tool-skill")
+            self.assertEqual(to_openai_tool(manifest)["function"]["name"], "tool-skill")
+
+    def test_an_explicit_json_null_type_is_rejected(self):
+        """`dict.get` collapses absent and null; a manifest must not exploit that."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            for name, schema in (
+                ("null-root", {"type": None}),
+                ("null-property", {"type": "object", "properties": {"a": {"type": None}}}),
+                ("null-extras", {"type": "object", "additionalProperties": {"type": None}}),
+            ):
+                skill_dir = Path(tmpdir) / name
+                skill_dir.mkdir()
+                (skill_dir / "manifest.json").write_text(
+                    json.dumps({"name": name, "input_schema": schema}), encoding="utf-8"
+                )
+
+            discovery = discover_manifests(tmpdir)
+            self.assertEqual(discovery.manifests, ())
+            self.assertEqual(
+                sorted(item.code for item in discovery.diagnostics),
+                [
+                    "invalid_additional_properties",
+                    "unsupported_property_type",
+                    "unsupported_schema_type",
+                ],
+            )
+
+    def test_an_absent_type_remains_unconstrained(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            skill_dir = Path(tmpdir) / "loose-skill"
+            skill_dir.mkdir()
+            (skill_dir / "manifest.json").write_text(
+                json.dumps(
+                    {
+                        "name": "loose-skill",
+                        "input_schema": {
+                            "type": "object",
+                            "properties": {"anything": {}},
+                            "additionalProperties": {},
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            discovery = discover_manifests(tmpdir)
+            self.assertEqual([item.name for item in discovery.manifests], ["loose-skill"])
+            self.assertEqual(discovery.diagnostics, ())
 
     def test_invalid_nested_schema_shapes_are_reported(self):
         with tempfile.TemporaryDirectory() as tmpdir:

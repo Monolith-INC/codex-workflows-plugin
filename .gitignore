@@ -19,3 +19,4 @@ AI_Codex/Projects/.obsidian/
 dist/
 build/
 .mypy_cache/
+.codex-workflows/

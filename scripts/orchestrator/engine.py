@@ -13,7 +13,7 @@ from .exhaustive import assert_never
 from .evaluator import SemanticEvaluator, collect_critiques, legacy_semantic_evaluator
 from .hooks import authorization_hook, cli_ui_hook
 from .failures import Deterministic, Fatal, Transient, classify
-from .manifests import manifest_by_name
+from .manifests import capabilities_by_name
 from .schema import validate_inputs
 from .state import Event, QueueState, Task, TaskState
 from .stream import OrchestratorStream
@@ -120,7 +120,7 @@ class OrchestratorEngine:
         self.interactive = interactive
         self.quiet = quiet
         self.semantic_evaluator = semantic_evaluator
-        self._manifests = manifest_by_name(self.skills_dir)
+        self._manifests = capabilities_by_name(self.skills_dir)
 
     def _subscribe_hooks(self, stream: OrchestratorStream) -> None:
         if not self.quiet:

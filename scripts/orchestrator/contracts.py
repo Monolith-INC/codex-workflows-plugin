@@ -177,6 +177,19 @@ ParseResult = Parsed | Rejected
 
 
 @dataclass(frozen=True)
+class _Absent:
+    """The key was not in the document, as distinct from an explicit JSON null.
+
+    `dict.get` collapses those two, so `"type": null` used to read as "no type
+    declared" and a malformed schema was accepted with an unconstrained
+    contract, then handed to clients as though it were valid.
+    """
+
+
+_ABSENT = _Absent()
+
+
+@dataclass(frozen=True)
 class _TypeParsed:
     contract: TypeContract
 
@@ -190,8 +203,12 @@ _TypeParse = _TypeParsed | _TypeRejected
 
 
 def _parse_type(raw: Any) -> _TypeParse:
-    """Parse a JSON Schema ``type``: absent, one name, or a list of names."""
-    if raw is None:
+    """Parse a JSON Schema ``type``: absent, one name, or a list of names.
+
+    An absent key leaves the type unconstrained. Any present value that is not a
+    name or a list of names -- including an explicit JSON null -- is rejected.
+    """
+    if isinstance(raw, _Absent):
         return _TypeParsed(AnyType())
     names = (raw,) if isinstance(raw, str) else raw
     if not isinstance(names, (list, tuple)) or not names:
@@ -233,7 +250,7 @@ def _parse_properties(
                 ),
             )
             continue
-        match _parse_type(property_schema.get("type")):
+        match _parse_type(property_schema.get("type", _ABSENT)):
             case _TypeParsed(contract):
                 parsed[name] = contract
             case _TypeRejected(raw_type):
@@ -265,7 +282,7 @@ def _parse_extras(
         return RejectExtras(), ()
     if not isinstance(raw, dict):
         return AcceptExtras(), invalid
-    match _parse_type(raw.get("type")):
+    match _parse_type(raw.get("type", _ABSENT)):
         case _TypeParsed(contract):
             return ConstrainExtras(contract), ()
         case _TypeRejected():

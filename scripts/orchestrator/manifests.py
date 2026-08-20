@@ -203,8 +203,8 @@ def discover_manifests(skills_dir: str | Path) -> ManifestDiscovery:
     return ManifestDiscovery(tuple(manifests), tuple(diagnostics))
 
 
-def read_manifests(skills_dir: str | Path) -> list[CapabilityManifest]:
-    """Compatibility view of the valid manifests discovered under ``skills_dir``."""
+def discovered_capabilities(skills_dir: str | Path) -> tuple[CapabilityManifest, ...]:
+    """The typed discovery API: valid capabilities, with diagnostics logged."""
     discovery = discover_manifests(skills_dir)
     for diagnostic in discovery.diagnostics:
         logger.warning(
@@ -213,11 +213,30 @@ def read_manifests(skills_dir: str | Path) -> list[CapabilityManifest]:
             diagnostic.code,
             diagnostic.message,
         )
-    return list(discovery.manifests)
+    return discovery.manifests
 
 
-def manifest_by_name(skills_dir: str | Path) -> dict[str, CapabilityManifest]:
-    return {manifest.name: manifest for manifest in read_manifests(skills_dir)}
+def capabilities_by_name(skills_dir: str | Path) -> dict[str, CapabilityManifest]:
+    """The typed discovery API, keyed by capability name."""
+    return {manifest.name: manifest for manifest in discovered_capabilities(skills_dir)}
+
+
+def read_manifests(skills_dir: str | Path) -> list[dict[str, Any]]:
+    """Compatibility view of the valid manifests discovered under ``skills_dir``.
+
+    Returns manifest bodies, the shape this wrapper has always returned and the
+    one the accepted specification fixes. Callers wanting the parsed contracts
+    use :func:`discovered_capabilities`.
+    """
+    return [dict(manifest.wire) for manifest in discovered_capabilities(skills_dir)]
+
+
+def manifest_by_name(skills_dir: str | Path) -> dict[str, dict[str, Any]]:
+    """Compatibility view keyed by capability name."""
+    return {
+        manifest.name: dict(manifest.wire)
+        for manifest in discovered_capabilities(skills_dir)
+    }
 
 
 def load_skill_instructions(skills_dir: str | Path, skill_name: str) -> str:
