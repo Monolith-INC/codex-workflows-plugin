@@ -4,6 +4,7 @@ from typing import Any
 
 from .adapters import to_anthropic_dialect
 from .handlers import get_handler
+from .invocation import Invocation
 from .manifests import CapabilityManifest, load_skill_instructions
 from .schema import validate_inputs
 from .state import Task, TaskState
@@ -24,7 +25,14 @@ def execute_skill(
 
     instructions = load_skill_instructions(skills_dir, skill_name)
     handler = get_handler(skill_name)
-    output = handler(arguments, manifest.wire, instructions)
+    output = handler(
+        Invocation(
+            arguments=arguments,
+            manifest=manifest.wire,
+            instructions=instructions,
+            attempt=_reflection_attempt(arguments, task),
+        )
+    )
 
     if output.get("mode") == "instructions" or "prompt" not in output:
         reflection_critiques = (
@@ -37,3 +45,15 @@ def execute_skill(
             **reflection_critiques,
         }
     return output
+
+
+def _reflection_attempt(arguments: dict[str, Any], task: Task) -> int:
+    """Where this run sits in the reflection sequence.
+
+    A caller resuming a stateless MCP round trip declares its own starting
+    attempt; in-process retries advance from there. Both were previously folded
+    into ``arguments`` by rewriting the caller's payload on each retry.
+    """
+    declared = arguments.get("attempt", 0)
+    resumed = int(declared) if isinstance(declared, (int, float)) and not isinstance(declared, bool) else 0
+    return resumed + task.retry_count

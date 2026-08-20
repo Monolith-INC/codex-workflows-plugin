@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -13,6 +14,43 @@ from .schema import validate_inputs
 from .state import Event, QueueState, Task, TaskState
 from .stream import OrchestratorStream
 from .worker import execute_skill
+
+
+@dataclass(frozen=True)
+class RetryContext:
+    """What the previous attempt produced, for stall detection."""
+
+    signature: Any = None
+    critiques: tuple[str, ...] = ()
+
+    def matches(self, signature: Any, critiques: Sequence[str]) -> bool:
+        return self.critiques == tuple(critiques) and self.signature == signature
+
+
+@dataclass(frozen=True)
+class Retry:
+    """The task may run again."""
+
+
+@dataclass(frozen=True)
+class Stop:
+    """The task is finished for this call; ``state`` is what it settled on."""
+
+    state: str
+
+
+NextStep = Retry | Stop
+
+
+def _next_step(task: Task, max_retries: int) -> NextStep:
+    """Decide from state alone, after every hook has seen the event.
+
+    An interactive approval runs inside `dispatch` and resets the task to READY
+    with a cleared retry count, so an approved task is simply READY again here.
+    """
+    if task.state == TaskState.READY and task.retry_count < max_retries:
+        return Retry()
+    return Stop(task.state.value)
 
 
 @dataclass(frozen=True)
@@ -93,8 +131,7 @@ class OrchestratorEngine:
         self._subscribe_hooks(stream)
         stream.dispatch(Event(type="TaskSpawnedEvent", payload={"task_id": task_id}))
 
-        last_output: Any = None
-        last_critiques: list[str] = []
+        context = RetryContext()
 
         while True:
             current = stream.state.tasks[task_id]
@@ -110,25 +147,22 @@ class OrchestratorEngine:
                 stream.dispatch(
                     Event(type="TaskFailedEvent", payload={"task_id": task_id, "critique": str(exc)})
                 )
-                current = stream.state.tasks[task_id]
-                if current.state == TaskState.BLOCKED_REQUIRES_REVIEW:
-                    return ToolCallResult(
-                        ok=False,
-                        output=None,
-                        error=str(exc),
-                        task_id=task_id,
-                        state=current.state.value,
-                    )
-                if current.state == TaskState.READY and current.retry_count < self.max_retries:
-                    stream.dispatch(Event(type="TaskSpawnedEvent", payload={"task_id": task_id}))
-                    continue
-                return ToolCallResult(
-                    ok=False,
-                    output=None,
-                    error=str(exc),
-                    task_id=task_id,
-                    state=current.state.value,
-                )
+                match _next_step(stream.state.tasks[task_id], self.max_retries):
+                    case Retry():
+                        stream.dispatch(
+                            Event(type="TaskSpawnedEvent", payload={"task_id": task_id})
+                        )
+                        continue
+                    case Stop(state):
+                        return ToolCallResult(
+                            ok=False,
+                            output=None,
+                            error=str(exc),
+                            task_id=task_id,
+                            state=state,
+                        )
+                    case unexpected:  # pragma: no cover - exhaustiveness guard
+                        raise AssertionError(f"non-exhaustive NextStep: {unexpected!r}")
 
             critiques = collect_critiques(
                 output,
@@ -141,77 +175,58 @@ class OrchestratorEngine:
                 )
                 return ToolCallResult(ok=True, output=output, task_id=task_id, state=TaskState.COMPLETED.value)
 
-            stable_output = _stall_signature(output)
-            if critiques == last_critiques and stable_output == last_output:
-                stream.dispatch(
-                    Event(
-                        type="TaskFailedEvent",
-                        payload={
-                            "task_id": task_id,
-                            "critique": "; ".join(critiques),
-                            "halt": True,
-                        },
+            signature = _stall_signature(output)
+            stalled = context.matches(signature, critiques)
+            failure: dict[str, Any] = {
+                "task_id": task_id,
+                "critique": "; ".join(critiques),
+            }
+            if stalled:
+                failure = {**failure, "halt": True}
+            stream.dispatch(Event(type="TaskFailedEvent", payload=failure))
+
+            # A stall that an operator then approves must not re-detect itself on
+            # the next attempt, or the approval would be a no-op.
+            context = (
+                RetryContext() if stalled else RetryContext(signature, tuple(critiques))
+            )
+
+            match _next_step(stream.state.tasks[task_id], self.max_retries):
+                case Retry():
+                    stream.dispatch(
+                        Event(type="TaskSpawnedEvent", payload={"task_id": task_id})
                     )
-                )
-                current = stream.state.tasks[task_id]
-                return ToolCallResult(
-                    ok=False,
-                    output=output,
-                    error="; ".join(critiques),
-                    task_id=task_id,
-                    state=current.state.value,
-                )
-
-            last_output = stable_output
-            last_critiques = list(critiques)
-            stream.dispatch(
-                Event(
-                    type="TaskFailedEvent",
-                    payload={"task_id": task_id, "critique": "; ".join(critiques)},
-                )
-            )
-            current = stream.state.tasks[task_id]
-            if current.state == TaskState.BLOCKED_REQUIRES_REVIEW:
-                return ToolCallResult(
-                    ok=False,
-                    output=output,
-                    error="; ".join(critiques),
-                    task_id=task_id,
-                    state=current.state.value,
-                )
-            if current.state == TaskState.READY and current.retry_count < self.max_retries:
-                stream.dispatch(Event(type="TaskSpawnedEvent", payload={"task_id": task_id}))
-                reflection = output.get("reflection") if isinstance(output, dict) else None
-                if isinstance(reflection, dict):
-                    arguments = {
-                        **arguments,
-                        "attempt": reflection.get("attempt", current.retry_count),
-                    }
-                continue
-
-            return ToolCallResult(
-                ok=False,
-                output=output,
-                error="; ".join(critiques),
-                task_id=task_id,
-                state=current.state.value,
-            )
+                    continue
+                case Stop(state):
+                    return ToolCallResult(
+                        ok=False,
+                        output=output,
+                        error="; ".join(critiques),
+                        task_id=task_id,
+                        state=state,
+                    )
+                case unexpected:  # pragma: no cover - exhaustiveness guard
+                    raise AssertionError(f"non-exhaustive NextStep: {unexpected!r}")
 
 
 _VOLATILE_OUTPUT_FIELDS = frozenset({"attempt", "prompt", "reflection_critiques"})
 
 
 def _stall_signature(output: Any) -> Any:
-    """Remove orchestration metadata that changes even when work does not.
+    """Project out orchestration metadata that changes even when work does not.
 
-    The worker adds a new prompt and attempt number on every retry. Comparing
-    that projected envelope made deterministic handler output look different and
-    rendered stall detection ineffective for instruction-only capabilities.
+    The worker adds a prompt and an attempt number on every retry, and handlers
+    nest their own reflection state carrying the same counter. Comparing those
+    made deterministic handler output look different on every pass and left
+    stall detection unable to fire. Stripping only the top level was the same
+    bug one layer down, so the projection recurses.
     """
-    if not isinstance(output, dict):
-        return output
-    return {
-        key: value
-        for key, value in output.items()
-        if key not in _VOLATILE_OUTPUT_FIELDS
-    }
+    if isinstance(output, dict):
+        return {
+            key: _stall_signature(value)
+            for key, value in output.items()
+            if key not in _VOLATILE_OUTPUT_FIELDS
+        }
+    if isinstance(output, (list, tuple)):
+        return tuple(_stall_signature(item) for item in output)
+    return output

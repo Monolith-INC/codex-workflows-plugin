@@ -1,3 +1,5 @@
+import contextlib
+import io
 import json
 import os
 import tempfile
@@ -5,6 +7,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from scripts.orchestrator import handlers
 from scripts.orchestrator.engine import OrchestratorEngine
 from scripts.orchestrator.mcp_server import process_message
 
@@ -138,6 +141,156 @@ class TestOrchestratorEngineE2E(unittest.TestCase):
             result.output.get("prompt", ""),
         )
         self.assertIn('"context": "preserved"', result.output.get("prompt", ""))
+
+    def _stub_skill(self, name: str) -> None:
+        self._write_skill(
+            name,
+            {
+                "name": name,
+                "description": "stub",
+                "input_schema": {"type": "object", "properties": {}},
+                "output_signature": {"type": "object", "properties": {}},
+            },
+            f"# {name}\n",
+        )
+
+    def test_stall_detection_sees_an_attempt_nested_in_reflection(self):
+        """Handlers report their attempt inside `reflection`, not at the top level."""
+        seen = []
+
+        def handler(invocation):
+            seen.append(invocation)
+            return {
+                "mode": "instructions",
+                "critiques": "still wrong",
+                "reflection": {"attempt": invocation.attempt + 1, "blocked": False},
+            }
+
+        self._stub_skill("nested-skill")
+        engine = OrchestratorEngine(self.skills_dir, max_retries=50)
+        with mock.patch.dict(handlers._HANDLERS, {"nested-skill": handler}):
+            result = engine.run_tool_call("nested-skill", {})
+
+        self.assertEqual(
+            len(seen), 2, "a deterministic handler must halt on the second identical result"
+        )
+        self.assertFalse(result.ok)
+        self.assertEqual(result.state, "Blocked_Requires_Review")
+
+    def test_the_attempt_counter_never_enters_the_caller_arguments(self):
+        seen = []
+
+        def handler(invocation):
+            seen.append((invocation.attempt, dict(invocation.arguments)))
+            return {
+                "mode": "instructions",
+                "critiques": f"attempt {invocation.attempt} rejected",
+                "reflection": {"attempt": invocation.attempt + 1},
+            }
+
+        self._stub_skill("counting-skill")
+        engine = OrchestratorEngine(self.skills_dir, max_retries=3)
+        with mock.patch.dict(handlers._HANDLERS, {"counting-skill": handler}):
+            engine.run_tool_call("counting-skill", {"context": "preserved"})
+
+        self.assertEqual([attempt for attempt, _ in seen], [0, 1, 2])
+        for _, arguments in seen:
+            self.assertEqual(arguments, {"context": "preserved"})
+
+    def test_a_caller_supplied_attempt_resumes_the_reflection_sequence(self):
+        seen = []
+
+        def handler(invocation):
+            seen.append(invocation.attempt)
+            return {
+                "mode": "instructions",
+                "critiques": f"attempt {invocation.attempt} rejected",
+            }
+
+        self._stub_skill("resuming-skill")
+        engine = OrchestratorEngine(self.skills_dir, max_retries=3)
+        with mock.patch.dict(handlers._HANDLERS, {"resuming-skill": handler}):
+            engine.run_tool_call("resuming-skill", {"attempt": 4})
+
+        self.assertEqual(seen, [4, 5, 6])
+
+    def test_a_strict_manifest_survives_every_retry(self):
+        """Nothing the engine adds may violate a contract the manifest declared."""
+        self._write_skill(
+            "strict-arguments",
+            {
+                "name": "strict-arguments",
+                "description": "declares exactly its inputs",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {"context": {"type": "string"}},
+                    "additionalProperties": False,
+                },
+                "output_signature": {"type": "object", "properties": {}},
+            },
+            "# strict-arguments\n",
+        )
+
+        attempts = []
+
+        def handler(invocation):
+            attempts.append(invocation.attempt)
+            # Vary the result so the run uses its whole retry budget rather than
+            # halting on the stall check; every retry must satisfy the contract.
+            return {
+                "mode": "instructions",
+                "critiques": f"attempt {invocation.attempt} rejected",
+            }
+
+        engine = OrchestratorEngine(self.skills_dir, max_retries=3)
+        with mock.patch.dict(handlers._HANDLERS, {"strict-arguments": handler}):
+            result = engine.run_tool_call("strict-arguments", {"context": "value"})
+
+        self.assertEqual(attempts, [0, 1, 2])
+        self.assertNotIn("Unknown argument", result.error or "")
+
+    def test_an_operator_approval_resumes_a_halted_run(self):
+        stalled = {"mode": "instructions", "critiques": "identical every time"}
+        scripted = [stalled, stalled, {"mode": "completed"}]
+        seen: list[int] = []
+
+        def handler(invocation):
+            index = len(seen)
+            seen.append(index)
+            return dict(scripted[min(index, len(scripted) - 1)])
+
+        self._stub_skill("approved-skill")
+        engine = OrchestratorEngine(
+            self.skills_dir, max_retries=50, interactive=True, quiet=True
+        )
+        with mock.patch.dict(handlers._HANDLERS, {"approved-skill": handler}):
+            with mock.patch("builtins.input", return_value="IMPLEMENTATION APPROVED"):
+                with contextlib.redirect_stderr(io.StringIO()):
+                    result = engine.run_tool_call("approved-skill", {})
+
+        self.assertEqual(len(seen), 3, "the approved task must run again")
+        self.assertTrue(result.ok, result.error)
+        self.assertEqual(result.state, "Completed")
+
+    def test_a_denied_approval_leaves_the_task_blocked(self):
+        seen: list = []
+
+        def handler(invocation):
+            seen.append(None)
+            return {"mode": "instructions", "critiques": "identical every time"}
+
+        self._stub_skill("denied-skill")
+        engine = OrchestratorEngine(
+            self.skills_dir, max_retries=50, interactive=True, quiet=True
+        )
+        with mock.patch.dict(handlers._HANDLERS, {"denied-skill": handler}):
+            with mock.patch("builtins.input", return_value="no"):
+                with contextlib.redirect_stderr(io.StringIO()):
+                    result = engine.run_tool_call("denied-skill", {})
+
+        self.assertEqual(len(seen), 2)
+        self.assertFalse(result.ok)
+        self.assertEqual(result.state, "Blocked_Requires_Review")
 
     def test_mcp_tools_call_round_trip(self):
         init = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})

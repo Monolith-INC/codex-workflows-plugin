@@ -4,15 +4,18 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from scripts.orchestrator.invocation import Invocation
 from scripts.orchestrator.handlers import handle_start_ticket, handle_write_spec
 
 
 class TestWriteSpecHandler(unittest.TestCase):
     def test_write_spec_returns_instructions_without_draft(self):
         result = handle_write_spec(
-            {"ticket_id": "T-1", "spec_kind": "tech-spec"},
-            {"name": "write-spec"},
-            "# write-spec\n",
+            Invocation(
+                arguments={"ticket_id": "T-1", "spec_kind": "tech-spec"},
+                manifest={"name": "write-spec"},
+                instructions="# write-spec\n",
+            )
         )
         self.assertEqual(result["mode"], "instructions")
         self.assertIn("template", result)
@@ -21,13 +24,15 @@ class TestWriteSpecHandler(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             with mock.patch.dict(os.environ, {"CODEX_PROJECT_ROOT": tmp}):
                 result = handle_write_spec(
-                    {
-                        "ticket_id": "T-1",
-                        "spec_kind": "adr",
-                        "draft_content": "too short",
-                    },
-                    {"name": "write-spec"},
-                    "# write-spec\n",
+                    Invocation(
+                        arguments={
+                            "ticket_id": "T-1",
+                            "spec_kind": "adr",
+                            "draft_content": "too short",
+                        },
+                        manifest={"name": "write-spec"},
+                        instructions="# write-spec\n",
+                    )
                 )
                 self.assertEqual(result["mode"], "instructions")
                 self.assertTrue(result["critiques"])
@@ -43,9 +48,11 @@ class TestStartTicketSpecHook(unittest.TestCase):
             with mock.patch.dict(os.environ, {"CODEX_PROJECT_ROOT": tmp, "CODEX_VAULT_FOLDER": vault}):
                 with self.assertRaises(ValueError) as ctx:
                     handle_start_ticket(
-                        {"ticket_id": "task-123"},
-                        {"name": "start-ticket"},
-                        "# start-ticket\n",
+                        Invocation(
+                            arguments={"ticket_id": "task-123"},
+                            manifest={"name": "start-ticket"},
+                            instructions="# start-ticket\n",
+                        )
                     )
                 self.assertIn("already an active ticket", str(ctx.exception))
 
@@ -53,9 +60,11 @@ class TestStartTicketSpecHook(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             with mock.patch.dict(os.environ, {"CODEX_PROJECT_ROOT": tmp}):
                 result = handle_start_ticket(
-                    {"ticket_id": "FEATURE-100"},
-                    {"name": "start-ticket"},
-                    "# start-ticket\n",
+                    Invocation(
+                        arguments={"ticket_id": "FEATURE-100"},
+                        manifest={"name": "start-ticket"},
+                        instructions="# start-ticket\n",
+                    )
                 )
                 self.assertTrue(result["generation_required"])
                 self.assertIsNotNone(result["write_spec_directive"])

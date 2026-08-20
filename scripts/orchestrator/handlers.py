@@ -14,6 +14,8 @@ from resolve_ticket_hook import on_resolve_ticket
 from spec_runtime import load_template, plan_spec_generation, slug_ticket_id
 from spec_start_hook import on_start_ticket
 
+from .invocation import Invocation
+
 
 def _project_root() -> Path | None:
     for key in ("CODEX_PROJECT_ROOT", "CURSOR_PROJECT_DIR", "CLAUDE_PROJECT_DIR"):
@@ -27,7 +29,8 @@ def _skills_dir() -> Path:
     return Path(__file__).resolve().parent.parent.parent / "skills"
 
 
-def handle_write_spec(arguments: dict[str, Any], manifest: dict[str, Any], instructions: str) -> dict[str, Any]:
+def handle_write_spec(invocation: Invocation) -> dict[str, Any]:
+    arguments, instructions = invocation.arguments, invocation.instructions
     ticket_id = arguments["ticket_id"]
     spec_kind = arguments.get("spec_kind", "tech-spec")
     vault = os.environ.get("CODEX_VAULT_FOLDER", "AI_Codex")
@@ -44,7 +47,7 @@ def handle_write_spec(arguments: dict[str, Any], manifest: dict[str, Any], instr
         template = f"# {spec_kind}\n\n<!-- Template missing; use write-spec references. -->\n"
 
     draft = arguments.get("draft_content", "").strip()
-    reflection = ReflectionState(attempt=int(arguments.get("attempt", 0)))
+    reflection = ReflectionState(attempt=invocation.attempt)
     engine = ReflectionEngine(spec_profile(spec_kind))
     context = ArtifactContext(
         skill_name="write-spec",
@@ -79,7 +82,8 @@ def handle_write_spec(arguments: dict[str, Any], manifest: dict[str, Any], instr
     }
 
 
-def handle_start_ticket(arguments: dict[str, Any], manifest: dict[str, Any], instructions: str) -> dict[str, Any]:
+def handle_start_ticket(invocation: Invocation) -> dict[str, Any]:
+    arguments, instructions = invocation.arguments, invocation.instructions
     ticket_id = arguments["ticket_id"]
     vault = os.environ.get("CODEX_VAULT_FOLDER", "AI_Codex")
     slug = slug_ticket_id(ticket_id)
@@ -124,7 +128,8 @@ def handle_start_ticket(arguments: dict[str, Any], manifest: dict[str, Any], ins
     }
 
 
-def handle_resolve_ticket(arguments: dict[str, Any], manifest: dict[str, Any], instructions: str) -> dict[str, Any]:
+def handle_resolve_ticket(invocation: Invocation) -> dict[str, Any]:
+    arguments, instructions = invocation.arguments, invocation.instructions
     ticket_id = arguments["ticket_id"]
     vault = os.environ.get("CODEX_VAULT_FOLDER", "AI_Codex")
     root = _project_root()
@@ -145,7 +150,7 @@ def handle_resolve_ticket(arguments: dict[str, Any], manifest: dict[str, Any], i
         ground_truth["implementation_summary"] = str(arguments["implementation_summary"])
 
     draft = arguments.get("draft_content", "").strip()
-    reflection = ReflectionState(attempt=int(arguments.get("attempt", 0)))
+    reflection = ReflectionState(attempt=invocation.attempt)
     engine = ReflectionEngine(resolution_profile())
     context = ArtifactContext(
         skill_name="resolve-ticket",
@@ -181,7 +186,8 @@ def handle_resolve_ticket(arguments: dict[str, Any], manifest: dict[str, Any], i
     }
 
 
-def handle_review_pr(arguments: dict[str, Any], manifest: dict[str, Any], instructions: str) -> dict[str, Any]:
+def handle_review_pr(invocation: Invocation) -> dict[str, Any]:
+    arguments, instructions = invocation.arguments, invocation.instructions
     return {
         "pr_number": arguments["pr_number"],
         "mode": "instructions",
@@ -189,7 +195,12 @@ def handle_review_pr(arguments: dict[str, Any], manifest: dict[str, Any], instru
     }
 
 
-def handle_instruction_only(arguments: dict[str, Any], manifest: dict[str, Any], instructions: str) -> dict[str, Any]:
+def handle_instruction_only(invocation: Invocation) -> dict[str, Any]:
+    arguments, manifest, instructions = (
+        invocation.arguments,
+        invocation.manifest,
+        invocation.instructions,
+    )
     return {
         "mode": "instructions",
         "skill": manifest.get("name", ""),

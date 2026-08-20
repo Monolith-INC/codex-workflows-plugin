@@ -4,6 +4,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from scripts.orchestrator.invocation import Invocation
 from scripts.orchestrator.handlers import handle_resolve_ticket
 
 
@@ -16,9 +17,11 @@ class TestResolveTicketHandler(unittest.TestCase):
                 spec_dir.mkdir(parents=True)
                 (spec_dir / "tech-spec.md").write_text("# Tech Spec\n", encoding="utf-8")
                 result = handle_resolve_ticket(
-                    {"ticket_id": "FEAT-9"},
-                    {"name": "resolve-ticket"},
-                    "# resolve-ticket\n",
+                    Invocation(
+                        arguments={"ticket_id": "FEAT-9"},
+                        manifest={"name": "resolve-ticket"},
+                        instructions="# resolve-ticket\n",
+                    )
                 )
                 self.assertEqual(result["mode"], "instructions")
                 self.assertTrue(result["resolution_required"])
@@ -33,12 +36,14 @@ class TestResolveTicketHandler(unittest.TestCase):
                 spec_dir.mkdir(parents=True)
                 (spec_dir / "tech-spec.md").write_text("# Tech Spec\n", encoding="utf-8")
                 result = handle_resolve_ticket(
-                    {
-                        "ticket_id": "FEAT-9",
-                        "draft_content": "too short",
-                    },
-                    {"name": "resolve-ticket"},
-                    "# resolve-ticket\n",
+                    Invocation(
+                        arguments={
+                            "ticket_id": "FEAT-9",
+                            "draft_content": "too short",
+                        },
+                        manifest={"name": "resolve-ticket"},
+                        instructions="# resolve-ticket\n",
+                    )
                 )
                 self.assertTrue(result["critiques"])
 
