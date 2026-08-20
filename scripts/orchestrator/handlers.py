@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +15,7 @@ from resolve_ticket_hook import on_resolve_ticket
 from spec_runtime import load_template, plan_spec_generation, slug_ticket_id
 from spec_start_hook import on_start_ticket
 
+from .failures import PolicyDenied
 from .invocation import HandlerResult, Invocation
 
 
@@ -106,7 +108,7 @@ def handle_start_ticket(invocation: Invocation) -> HandlerResult:
                 )
             )
             if decision.is_denied():
-                raise ValueError(decision.reason or "ticket start blocked by policy")
+                raise PolicyDenied(decision.reason or "ticket start blocked by policy")
         ledger_path.parent.mkdir(parents=True, exist_ok=True)
         if not ledger_path.exists():
             ledger_path.write_text(
@@ -219,7 +221,7 @@ def handle_instruction_only(invocation: Invocation) -> HandlerResult:
     )
 
 
-_HANDLERS: dict[str, Any] = {
+_HANDLERS: dict[str, Callable[[Invocation], HandlerResult]] = {
     "start-ticket": handle_start_ticket,
     "write-spec": handle_write_spec,
     "resolve-ticket": handle_resolve_ticket,
@@ -227,5 +229,5 @@ _HANDLERS: dict[str, Any] = {
 }
 
 
-def get_handler(skill_name: str):
+def get_handler(skill_name: str) -> Callable[[Invocation], HandlerResult]:
     return _HANDLERS.get(skill_name, handle_instruction_only)

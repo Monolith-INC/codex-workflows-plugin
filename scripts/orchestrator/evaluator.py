@@ -1,11 +1,11 @@
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Any
 
 from .contracts import OUTPUT_PROPERTY, check_value
 from .manifests import CapabilityManifest
 
 
-SemanticEvaluator = Callable[[dict[str, Any], dict[str, Any]], list[str]]
+SemanticEvaluator = Callable[[dict[str, Any], Mapping[str, Any]], list[str]]
 
 
 def skill_validation_critiques(output: dict[str, Any]) -> list[str]:
@@ -14,7 +14,7 @@ def skill_validation_critiques(output: dict[str, Any]) -> list[str]:
 
 
 def legacy_semantic_evaluator(
-    output: dict[str, Any], _manifest: dict[str, Any]
+    output: dict[str, Any], _manifest: Mapping[str, Any]
 ) -> list[str]:
     """Interpret the version 0.5.20 ``mode``/``critiques`` convention.
 

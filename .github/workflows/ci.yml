@@ -20,5 +20,11 @@ jobs:
       - name: Validate Codex plugin
         run: python3 scripts/validate_plugin.py .
 
+      - name: Install type checker
+        run: python3 -m pip install --quiet mypy
+
+      - name: Type-check the orchestrator
+        run: python3 -m mypy --config-file scripts/mypy.ini
+
       - name: Run tests
         run: python3 -m unittest -v

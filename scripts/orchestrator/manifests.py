@@ -8,6 +8,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from .exhaustive import assert_never
+from .failures import SkillAssetMissing
 from .contracts import (
     Parsed,
     Rejected,
@@ -100,8 +102,8 @@ def parse_manifest(data: Any, path: str | Path) -> ManifestParse:
                 diagnostics += tuple(
                     reject(issue.code, issue.message) for issue in issues
                 )
-            case unexpected:  # pragma: no cover - exhaustiveness guard
-                raise AssertionError(f"non-exhaustive ParseResult: {unexpected!r}")
+            case _ as unmatched:
+                assert_never(unmatched)
 
     if diagnostics:
         return ManifestRejected(diagnostics)
@@ -124,8 +126,8 @@ def validate_manifest(data: Any, path: str | Path) -> tuple[ManifestDiagnostic, 
             return ()
         case ManifestRejected(diagnostics):
             return diagnostics
-        case unexpected:  # pragma: no cover - exhaustiveness guard
-            raise AssertionError(f"non-exhaustive ManifestParse: {unexpected!r}")
+        case _ as unmatched:
+            assert_never(unmatched)
 
 
 def discover_manifests(skills_dir: str | Path) -> ManifestDiscovery:
@@ -181,8 +183,8 @@ def discover_manifests(skills_dir: str | Path) -> ManifestDiscovery:
                 candidates.append((manifest_file, manifest))
             case ManifestRejected(issues):
                 diagnostics.extend(issues)
-            case unexpected:  # pragma: no cover - exhaustiveness guard
-                raise AssertionError(f"non-exhaustive ManifestParse: {unexpected!r}")
+            case _ as unmatched:
+                assert_never(unmatched)
 
     name_counts = Counter(manifest.name for _, manifest in candidates)
     manifests: list[CapabilityManifest] = []
@@ -221,5 +223,5 @@ def manifest_by_name(skills_dir: str | Path) -> dict[str, CapabilityManifest]:
 def load_skill_instructions(skills_dir: str | Path, skill_name: str) -> str:
     skill_md = Path(skills_dir) / skill_name / "SKILL.md"
     if not skill_md.is_file():
-        raise FileNotFoundError(f"Missing SKILL.md for skill '{skill_name}'")
+        raise SkillAssetMissing(f"Missing SKILL.md for skill '{skill_name}'")
     return skill_md.read_text(encoding="utf-8")

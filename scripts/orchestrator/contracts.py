@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
+from .exhaustive import assert_never
 from .state import FrozenDict
 
 
@@ -241,8 +242,8 @@ def _parse_properties(
                         f"{field_name}.properties.{name}.type '{raw_type}' is not supported.",
                     ),
                 )
-            case unexpected:  # pragma: no cover - exhaustiveness guard
-                raise AssertionError(f"non-exhaustive _TypeParse: {unexpected!r}")
+            case _ as unmatched:
+                assert_never(unmatched)
 
     return FrozenDict(parsed), diagnostics
 
@@ -268,8 +269,8 @@ def _parse_extras(
             return ConstrainExtras(contract), ()
         case _TypeRejected():
             return AcceptExtras(), invalid
-        case unexpected:  # pragma: no cover - exhaustiveness guard
-            raise AssertionError(f"non-exhaustive _TypeParse: {unexpected!r}")
+        case _ as unmatched:
+            assert_never(unmatched)
 
 
 def _parse_required(
@@ -314,8 +315,8 @@ def parse_value_contract(raw: Any, field_name: str) -> ParseResult:
                     f"{field_name}.type '{raw_type}' is not supported.",
                 ),
             )
-        case unexpected:  # pragma: no cover - exhaustiveness guard
-            raise AssertionError(f"non-exhaustive _TypeParse: {unexpected!r}")
+        case _ as unmatched:
+            assert_never(unmatched)
 
     required, required_diagnostics = _parse_required(raw.get("required", []), field_name)
     properties, property_diagnostics = _parse_properties(
@@ -342,8 +343,8 @@ def _constrains_objects(contract: TypeContract) -> bool:
             return False
         case OneOfTypes(types):
             return types == frozenset({JsonType.OBJECT})
-        case unexpected:  # pragma: no cover - exhaustiveness guard
-            raise AssertionError(f"non-exhaustive TypeContract: {unexpected!r}")
+        case _ as unmatched:
+            assert_never(unmatched)
 
 
 # --- Checking --------------------------------------------------------------
@@ -364,8 +365,8 @@ def check_value(
             if not isinstance(value, dict):
                 return (not_object_message,)
             return check_object(value, object_contract, subject)
-        case unexpected:  # pragma: no cover - exhaustiveness guard
-            raise AssertionError(f"non-exhaustive ValueContract: {unexpected!r}")
+        case _ as unmatched:
+            assert_never(unmatched)
 
 
 def check_object(
@@ -398,8 +399,8 @@ def _check_member(
             return (f"Unknown {subject.unknown_noun} '{key}' is not allowed.",)
         case ConstrainExtras(extra_contract):
             return _check_type(key, value, extra_contract, subject)
-        case unexpected:  # pragma: no cover - exhaustiveness guard
-            raise AssertionError(f"non-exhaustive ExtraProperties: {unexpected!r}")
+        case _ as unmatched:
+            assert_never(unmatched)
 
 
 def _check_type(
@@ -415,8 +416,8 @@ def _check_type(
                 f"{subject.label} '{key}' should be {_expected_phrase(types, subject)}, "
                 f"got {type(value).__name__}.",
             )
-        case unexpected:  # pragma: no cover - exhaustiveness guard
-            raise AssertionError(f"non-exhaustive TypeContract: {unexpected!r}")
+        case _ as unmatched:
+            assert_never(unmatched)
 
 
 def _expected_phrase(types: frozenset[JsonType], subject: Subject) -> str:

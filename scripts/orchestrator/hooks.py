@@ -1,13 +1,19 @@
+from __future__ import annotations
+
 import sys
+from typing import TYPE_CHECKING
 
 from .state import Event, QueueState, TaskState
+
+if TYPE_CHECKING:  # pragma: no cover - import cycle only exists for typing
+    from .stream import OrchestratorStream
 
 
 def _log(message: str) -> None:
     print(message, file=sys.stderr, flush=True)
 
 
-def cli_ui_hook(state: QueueState, event: Event, stream):
+def cli_ui_hook(state: QueueState, event: Event, stream: OrchestratorStream) -> None:
     """Log task transitions to stderr (safe for MCP stdio transport)."""
     _log(f"[*] Event Processed: {event.type}")
     if event.payload and "task_id" in event.payload:
@@ -34,8 +40,12 @@ def _approvals_for(state: QueueState, task_id: str) -> int:
 
 
 def authorization_hook(
-    state: QueueState, event: Event, stream, *, max_approvals: int = 1
-):
+    state: QueueState,
+    event: Event,
+    stream: OrchestratorStream,
+    *,
+    max_approvals: int = 1,
+) -> None:
     """Halt execution for human review when the circuit breaker trips (interactive mode only).
 
     An approval restores the task's full retry budget, so an approver that never
@@ -48,6 +58,8 @@ def authorization_hook(
         return
 
     task_id = event.payload.get("task_id")
+    if not isinstance(task_id, str):
+        return
     task = state.tasks.get(task_id)
     if not task or task.state != TaskState.BLOCKED_REQUIRES_REVIEW:
         return

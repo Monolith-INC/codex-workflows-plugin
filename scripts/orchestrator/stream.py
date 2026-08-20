@@ -8,18 +8,20 @@ from .state import Event, QueueState
 class OrchestratorStream:
     """A reactive state container that manages the event stream and state transitions."""
 
-    def __init__(self, initial_state: QueueState, *, max_retries: int = 3):
+    def __init__(self, initial_state: QueueState, *, max_retries: int = 3) -> None:
         self.state = initial_state
         self.max_retries = max_retries
         self.listeners: List[Callable[[QueueState, Event, "OrchestratorStream"], None]] = []
         self._queue: deque[Event] = deque()
         self._dispatching = False
 
-    def subscribe(self, listener: Callable[[QueueState, Event, "OrchestratorStream"], None]):
+    def subscribe(
+        self, listener: Callable[[QueueState, Event, "OrchestratorStream"], None]
+    ) -> None:
         """Register a hook to listen for state changes and events."""
         self.listeners.append(listener)
 
-    def dispatch(self, event: Event):
+    def dispatch(self, event: Event) -> None:
         """Process events via a queue so nested dispatches stay ordered and consistent."""
         self._queue.append(event)
         if self._dispatching:

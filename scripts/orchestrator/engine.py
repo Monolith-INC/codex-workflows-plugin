@@ -8,19 +8,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from .exhaustive import assert_never
 from .evaluator import SemanticEvaluator, collect_critiques, legacy_semantic_evaluator
 from .hooks import authorization_hook, cli_ui_hook
-from .invocation import HandlerContractError
+from .failures import Deterministic, Fatal, Transient, classify
 from .manifests import manifest_by_name
 from .schema import validate_inputs
 from .state import Event, QueueState, Task, TaskState
 from .stream import OrchestratorStream
 from .worker import execute_skill
-
-
-@dataclass(frozen=True)
-class Raised:
-    """Signature for an attempt that ended in an exception rather than output."""
 
 
 @dataclass(frozen=True)
@@ -155,19 +151,23 @@ class OrchestratorEngine:
                     task=current,
                 )
             except Exception as exc:
-                # A raise gets the same no-progress treatment as a rejected
-                # result: repeating a deterministic failure is not an attempt.
+                # Whether running again could help is a property of the failure,
+                # declared by its type. Nothing here reads the message.
                 reason = str(exc)
-                stalled = isinstance(exc, HandlerContractError) or context.matches(
-                    Raised(), (reason,)
-                )
-                failure: dict[str, Any] = {"task_id": task_id, "critique": reason}
-                if stalled:
-                    failure = {**failure, "halt": True}
-                stream.dispatch(Event(type="TaskFailedEvent", payload=failure))
-                context = (
-                    RetryContext() if stalled else RetryContext(Raised(), (reason,))
-                )
+                match classify(exc):
+                    case Fatal() | Deterministic():
+                        halt = True
+                    case Transient():
+                        halt = False
+                    case _ as unmatched_failure:
+                        assert_never(unmatched_failure)
+
+                raised: dict[str, Any] = {"task_id": task_id, "critique": reason}
+                if halt:
+                    raised = {**raised, "halt": True}
+                stream.dispatch(Event(type="TaskFailedEvent", payload=raised))
+                # A raise produced no result, so the comparison sequence restarts.
+                context = RetryContext()
 
                 match _next_step(stream.state.tasks[task_id], self.max_retries):
                     case Retry():
@@ -183,8 +183,8 @@ class OrchestratorEngine:
                             task_id=task_id,
                             state=state,
                         )
-                    case unexpected:  # pragma: no cover - exhaustiveness guard
-                        raise AssertionError(f"non-exhaustive NextStep: {unexpected!r}")
+                    case _ as unmatched_step:
+                        assert_never(unmatched_step)
 
             # Only the work is evaluated and compared. The reflection state and
             # the worker's envelope change on every attempt by design.
@@ -231,5 +231,5 @@ class OrchestratorEngine:
                         task_id=task_id,
                         state=state,
                     )
-                case unexpected:  # pragma: no cover - exhaustiveness guard
-                    raise AssertionError(f"non-exhaustive NextStep: {unexpected!r}")
+                case _ as unmatched_step:
+                    assert_never(unmatched_step)

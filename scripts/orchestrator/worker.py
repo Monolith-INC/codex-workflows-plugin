@@ -4,9 +4,11 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
+from .exhaustive import assert_never
 from .adapters import to_anthropic_dialect
 from .handlers import get_handler
-from .invocation import HandlerContractError, HandlerResult, Invocation
+from .failures import HandlerContractError, InputContractError
+from .invocation import HandlerResult, Invocation
 from .manifests import CapabilityManifest, load_skill_instructions
 from .schema import validate_inputs
 from .state import FrozenDict, Task, TaskState
@@ -52,8 +54,8 @@ class SkillOutput:
                     "attempt": attempt,
                     **({"reflection_critiques": list(critiques)} if critiques else {}),
                 }
-            case unexpected:  # pragma: no cover - exhaustiveness guard
-                raise AssertionError(f"non-exhaustive Envelopes: {unexpected!r}")
+            case _ as unmatched:
+                assert_never(unmatched)
         reflection = {"reflection": dict(self.reflection)} if self.reflection else {}
         return {**self.product, **reflection, **added}
 
@@ -69,7 +71,7 @@ def execute_skill(
     """Run a skill handler and return its result for evaluation."""
     input_critiques = validate_inputs(arguments, manifest)
     if input_critiques:
-        raise ValueError("; ".join(input_critiques))
+        raise InputContractError("; ".join(input_critiques))
 
     instructions = load_skill_instructions(skills_dir, skill_name)
     handler = get_handler(skill_name)

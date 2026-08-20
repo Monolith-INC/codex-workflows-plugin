@@ -9,6 +9,7 @@ from unittest import mock
 
 from scripts.orchestrator import handlers
 from scripts.orchestrator.engine import OrchestratorEngine
+from scripts.orchestrator.failures import PolicyDenied
 from scripts.orchestrator.invocation import HandlerResult
 from scripts.orchestrator.mcp_server import process_message
 
@@ -288,30 +289,31 @@ class TestOrchestratorEngineE2E(unittest.TestCase):
         self.assertEqual(result.output["reflection"], {"attempt": 1})
         self.assertIn("prompt", result.output)
 
-    def test_a_deterministic_raise_halts_on_the_second_attempt(self):
-        """Repeating a failure that cannot change is not an attempt."""
+    def test_a_declared_deterministic_failure_halts_at_once(self):
+        """A failure that says it will repeat is not retried at all."""
         raised = []
 
         def handler(invocation):
             raised.append(invocation.attempt)
-            raise ValueError("the vault is not writable")
+            raise PolicyDenied("there is already an active ticket")
 
-        self._stub_skill("raising-skill")
+        self._stub_skill("refusing-skill")
         engine = OrchestratorEngine(self.skills_dir, max_retries=25)
-        with mock.patch.dict(handlers._HANDLERS, {"raising-skill": handler}):
-            result = engine.run_tool_call("raising-skill", {})
+        with mock.patch.dict(handlers._HANDLERS, {"refusing-skill": handler}):
+            result = engine.run_tool_call("refusing-skill", {})
 
-        self.assertEqual(raised, [0, 1])
+        self.assertEqual(raised, [0])
         self.assertFalse(result.ok)
-        self.assertEqual(result.error, "the vault is not writable")
+        self.assertEqual(result.error, "there is already an active ticket")
         self.assertEqual(result.state, "Blocked_Requires_Review")
 
-    def test_a_varying_raise_still_uses_its_retry_budget(self):
+    def test_an_unclassified_failure_keeps_its_retry_budget(self):
+        """Unknown failures are assumed transient: waste work, never abort early."""
         raised = []
 
         def handler(invocation):
             raised.append(invocation.attempt)
-            raise ValueError(f"transient failure {invocation.attempt}")
+            raise ValueError("connection reset")
 
         self._stub_skill("flaky-skill")
         engine = OrchestratorEngine(self.skills_dir, max_retries=3)
@@ -319,6 +321,20 @@ class TestOrchestratorEngineE2E(unittest.TestCase):
             result = engine.run_tool_call("flaky-skill", {})
 
         self.assertEqual(raised, [0, 1, 2])
+        self.assertEqual(result.state, "Blocked_Requires_Review")
+
+    def test_a_missing_skill_asset_halts_at_once(self):
+        skill_dir = self.skills_dir / "no-instructions"
+        skill_dir.mkdir()
+        (skill_dir / "manifest.json").write_text(
+            json.dumps({"name": "no-instructions"}), encoding="utf-8"
+        )
+
+        engine = OrchestratorEngine(self.skills_dir, max_retries=25)
+        result = engine.run_tool_call("no-instructions", {})
+
+        self.assertFalse(result.ok)
+        self.assertIn("Missing SKILL.md", result.error or "")
         self.assertEqual(result.state, "Blocked_Requires_Review")
 
     def test_a_handler_protocol_violation_halts_immediately(self):
@@ -339,7 +355,7 @@ class TestOrchestratorEngineE2E(unittest.TestCase):
         self.assertIn("must return a HandlerResult", result.error or "")
         self.assertEqual(result.state, "Blocked_Requires_Review")
 
-    def test_the_policy_denial_no_longer_repeats_itself(self):
+    def test_the_policy_denial_runs_the_handler_once(self):
         start_dir = self.skills_dir / "start-ticket"
         start_dir.mkdir()
         (start_dir / "manifest.json").write_text(
@@ -371,7 +387,7 @@ class TestOrchestratorEngineE2E(unittest.TestCase):
                 engine = OrchestratorEngine(self.skills_dir)
                 result = engine.run_tool_call("start-ticket", {"ticket_id": "task-123"})
 
-        self.assertEqual(attempts, [0, 1])
+        self.assertEqual(attempts, [0])
         self.assertFalse(result.ok)
         self.assertIn("already an active ticket", result.error or "")
 

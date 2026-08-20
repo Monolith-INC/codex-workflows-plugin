@@ -18,3 +18,4 @@ AI_Codex/Projects/.obsidian/
 .agent/
 dist/
 build/
+.mypy_cache/
