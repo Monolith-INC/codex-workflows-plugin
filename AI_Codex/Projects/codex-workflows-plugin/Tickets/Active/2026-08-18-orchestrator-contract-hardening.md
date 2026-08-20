@@ -97,6 +97,93 @@ Rollback remains milestone-local: revert the manifest, state/reducer, semantic,
 or final immutability commit independently. The characterization tests should
 remain whenever they document the version 0.5.20 compatibility boundary.
 
+## Review Follow-Up (2026-08-19)
+
+A code review of the branch diff found six defects in the delivered milestones.
+Two are addressed here; four remain open.
+
+### Delivered
+
+- **Reducer unblock guard.** `handle_task_completed` dropped the
+  `task_id in dependencies` check, so `all()` over an empty `dependencies`
+  tuple promoted any dependency-free BLOCKED task to READY on an unrelated
+  completion. The guard is restored and covered by two regression tests that
+  fail without it.
+- **Single parsed payload contract.** The manifest JSON Schema subset was read
+  by four independent hand-written interpreters that disagreed with each other
+  (`manifests._validate_schema`, `schema.validate_inputs`,
+  `evaluator.evaluate_output`, and the engine's `attempt` injection). They are
+  replaced by `scripts/orchestrator/contracts.py`: raw schema JSON is parsed
+  exactly once into frozen algebraic types (`TypeContract`, `ExtraProperties`,
+  `ValueContract`) and every consumer reads the parsed contract.
+
+Two review findings are closed as a consequence:
+
+- JSON Schema's `type` array form (`["string","null"]`) raised
+  `TypeError: unhashable type: 'list'`, aborting discovery and the whole MCP
+  server rather than isolating one manifest. Verified against the pre-change
+  module; now parsed as a `OneOfTypes` union.
+- The subschema form of `additionalProperties` was rejected, silently dropping
+  the capability from `list_tools()` and surfacing only as
+  `Unknown skill '<name>'`. Verified against the pre-change module; now parsed
+  as `ConstrainExtras`.
+
+`additionalProperties` is deliberately modelled as one contract with three
+constructors. In JSON Schema a boolean *is* a schema (`true` accepts every
+extra key, `false` accepts none), so the boolean spelling is sugar and is
+normalized away at the parse boundary; no consumer sees it.
+
+`discover_manifests` also contains parser defects now: an unexpected exception
+from `parse_manifest` becomes a `parser_error` diagnostic for that manifest
+instead of propagating.
+
+`CapabilityManifest.wire` retains the frozen, JSON-identical image of
+`manifest.json` purely for host dialect projection (MCP `inputSchema`,
+Anthropic and OpenAI tool schemas), and is asserted to serialize identically to
+the file on disk.
+
+### Retry Path
+
+The remaining three findings shared one cause: the retry path carried
+orchestration metadata in channels belonging to something else.
+
+- **Stall detection restored.** `_stall_signature` stripped volatile fields at
+  the top level only, while handlers nest their counter in `reflection`, so the
+  signature differed on every pass and the fast-fail was dead code. The
+  projection now recurses. Measured on the repo's own skills: `write-spec` with
+  a placeholder draft and `max_retries=50` invoked the handler 50 times before,
+  and 2 times now.
+- **Interactive approval honored.** The `halt` branch returned unconditionally
+  even though `authorization_hook` had already reset the task to READY inside
+  `dispatch`, discarding the approval and reporting
+  `ok=False, state="Ready"`. The three copies of the post-failure branch are
+  replaced by one `_next_step` returning `Retry | Stop`, decided from task state
+  after every hook has seen the event. The stall memory is cleared on that path,
+  or the approved attempt would re-detect the same stall.
+- **Argument channel separated.** Handlers now receive a frozen `Invocation`
+  carrying `arguments`, `manifest`, `instructions` and `attempt` as distinct
+  fields; the engine no longer rewrites the caller's payload. A caller resuming
+  a stateless MCP round trip still declares its own starting attempt and
+  in-process retries advance from there, reproducing the previous numbering.
+
+`last_output`/`last_critiques` became a frozen `RetryContext`, so clearing the
+stall memory is one value rather than two rebinds that can drift apart.
+
+Each new test was checked against a temporary revert of its own fix and fails
+without it.
+
+### Still Open
+
+None from the review. Follow-ups worth considering, not defects:
+
+- `_VOLATILE_OUTPUT_FIELDS` is a denylist that grows whenever a handler adds an
+  orchestration field. Splitting handler output into a work product and an
+  envelope would make the stall signature a projection instead of a
+  subtraction, but it would change the MCP result shape this ticket preserves.
+- `evaluate_output` now honors `additionalProperties` on `output_signature`,
+  which no shipped manifest sets. A manifest that opted in would reject the
+  `prompt`/`attempt` fields the worker appends.
+
 ## Verification
 
 Baseline: `python3 -m unittest` passed 233 tests in 9.2 seconds on source version
