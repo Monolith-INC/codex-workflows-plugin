@@ -6,16 +6,9 @@ from pathlib import Path
 from typing import Any
 
 SPEC_KINDS = (
-    "rfc",
-    "adr",
-    "design-doc",
-    "tech-spec",
-    "srs",
-    "implementation-plan",
-    "bugfix-spec",
-    "api-contract",
+    "rfc", "adr", "design-doc", "tech-spec", "srs", "implementation-plan",
+    "bugfix-spec", "api-contract",
 )
-
 DEFAULT_KINDS_BY_SIGNAL = {
     "bugfix": ("bugfix-spec", "adr"),
     "feature": ("design-doc", "tech-spec"),
@@ -29,8 +22,8 @@ DEFAULT_KINDS_BY_SIGNAL = {
 class SpecPlan:
     ticket_id: str
     slug: str
-    specs_dir: str
-    existing_specs: tuple[str, ...]
+    existing_artifacts: tuple[str, ...]
+    required_kinds: tuple[str, ...]
     missing_kinds: tuple[str, ...]
     generation_required: bool
     source_hints: dict[str, str] = field(default_factory=dict)
@@ -39,8 +32,8 @@ class SpecPlan:
         return {
             "ticket_id": self.ticket_id,
             "slug": self.slug,
-            "specs_dir": self.specs_dir,
-            "existing_specs": list(self.existing_specs),
+            "existing_artifacts": list(self.existing_artifacts),
+            "required_kinds": list(self.required_kinds),
             "missing_kinds": list(self.missing_kinds),
             "generation_required": self.generation_required,
             "source_hints": dict(self.source_hints),
@@ -52,33 +45,8 @@ def slug_ticket_id(ticket_id: str) -> str:
     return slug or "ticket"
 
 
-def specs_root(vault_folder: str, project_root: Path | None) -> Path | None:
-    if project_root is None:
-        return None
-    return project_root / vault_folder / "Specs"
-
-
-def spec_dir_for_ticket(vault_folder: str, project_root: Path | None, slug: str) -> Path | None:
-    root = specs_root(vault_folder, project_root)
-    if root is None:
-        return None
-    return root / slug
-
-
-def list_existing_specs(spec_dir: Path) -> list[str]:
-    if not spec_dir.exists():
-        return []
-    files = sorted(p.name for p in spec_dir.glob("*.md") if p.is_file())
-    if files:
-        return files
-    single = spec_dir.with_suffix(".md")
-    if single.is_file():
-        return [single.name]
-    return []
-
-
-def infer_ticket_signal(ticket_id: str, ledger_text: str = "") -> str:
-    combined = f"{ticket_id}\n{ledger_text}".lower()
+def infer_ticket_signal(ticket_id: str, source_text: str = "") -> str:
+    combined = f"{ticket_id}\n{source_text}".lower()
     if re.search(r"\bbug(fix)?\b", combined) or "type: bug" in combined:
         return "bugfix"
     if re.search(r"\brefactor\b", combined):
@@ -94,63 +62,38 @@ def kinds_for_signal(signal: str) -> tuple[str, ...]:
     return DEFAULT_KINDS_BY_SIGNAL.get(signal, DEFAULT_KINDS_BY_SIGNAL["default"])
 
 
-def missing_spec_kinds(existing_files: list[str], desired_kinds: tuple[str, ...]) -> list[str]:
-    existing = {name.removesuffix(".md").lower() for name in existing_files}
+def missing_spec_kinds(existing_artifacts: list[str] | tuple[str, ...], desired_kinds: tuple[str, ...]) -> list[str]:
+    existing = {str(name).removesuffix(".md").lower() for name in existing_artifacts}
     return [kind for kind in desired_kinds if kind not in existing]
 
 
-def read_ticket_ledger(project_root: Path | None, ledger_rel: str) -> str:
-    if project_root is None:
-        return ""
-    path = project_root / ledger_rel
-    if not path.is_file():
-        return ""
-    try:
-        return path.read_text(encoding="utf-8")
-    except OSError:
-        return ""
-
-
-def plan_spec_generation(
-    project_root: Path | None,
-    *,
-    vault_folder: str,
-    ticket_id: str,
-    ledger_rel: str | None = None,
-) -> SpecPlan:
-    slug = slug_ticket_id(ticket_id)
-    rel_specs_dir = f"{vault_folder}/Specs/{slug}"
-    spec_dir = spec_dir_for_ticket(vault_folder, project_root, slug)
-    ledger_text = read_ticket_ledger(project_root, ledger_rel or f"{vault_folder}/Tickets/Active/{slug}.md")
-    signal = infer_ticket_signal(ticket_id, ledger_text)
-    desired = kinds_for_signal(signal)
-    existing = list_existing_specs(spec_dir) if spec_dir is not None else []
-    missing = missing_spec_kinds(existing, desired)
-    hints = _extract_source_hints(ledger_text)
-    return SpecPlan(
-        ticket_id=ticket_id,
-        slug=slug,
-        specs_dir=rel_specs_dir,
-        existing_specs=tuple(existing),
-        missing_kinds=tuple(missing),
-        generation_required=bool(missing),
-        source_hints=hints,
-    )
-
-
-def _extract_source_hints(ledger_text: str) -> dict[str, str]:
+def _extract_source_hints(source_text: str) -> dict[str, str]:
     hints: dict[str, str] = {}
     for label, pattern in (
         ("requirements", r"(?im)^(?:##\s*)?requirements?\s*[:\n](.+?)(?:\n##|\Z)"),
         ("description", r"(?im)^(?:##\s*)?description\s*[:\n](.+?)(?:\n##|\Z)"),
         ("implementation_plan", r"(?im)^(?:##\s*)?implementation\s+plan\s*[:\n](.+?)(?:\n##|\Z)"),
     ):
-        match = re.search(pattern, ledger_text, re.DOTALL)
+        match = re.search(pattern, source_text, re.DOTALL)
         if match:
             hints[label] = match.group(1).strip()[:2000]
-    if not hints and ledger_text.strip():
-        hints["description"] = ledger_text.strip()[:2000]
+    if not hints and source_text.strip():
+        hints["description"] = source_text.strip()[:2000]
     return hints
+
+
+def plan_spec_generation(
+    ticket_id: str,
+    *,
+    source_text: str = "",
+    existing_artifacts: list[str] | tuple[str, ...] = (),
+    required_kinds: list[str] | tuple[str, ...] | None = None,
+    kind: str | None = None,
+) -> SpecPlan:
+    desired = tuple(required_kinds or ((kind,) if kind else kinds_for_signal(infer_ticket_signal(ticket_id, source_text))))
+    existing = tuple(str(item) for item in existing_artifacts)
+    missing = missing_spec_kinds(existing, desired)
+    return SpecPlan(ticket_id, slug_ticket_id(ticket_id), existing, desired, tuple(missing), bool(missing), _extract_source_hints(source_text))
 
 
 def template_path(skills_dir: Path, kind: str) -> Path:

@@ -19,7 +19,7 @@ RESOLUTION_HEADINGS = (
 
 def _require_ground_truth_specs(text: str, context: ArtifactContext) -> list[str]:
     critiques: list[str] = []
-    specs = context.ground_truth.get("spec_files", [])
+    specs = context.ground_truth.get("spec_artifacts", [])
     if not specs:
         critiques.append("No spec files found for this ticket — write-spec must run before resolve-ticket.")
         return critiques
@@ -37,7 +37,7 @@ def _require_implementation_evidence(text: str, context: ArtifactContext) -> lis
     critiques: list[str] = []
     summary = str(context.ground_truth.get("implementation_summary", "")).strip()
     if summary and summary.lower() not in text.lower() and len(summary) > 40:
-        critiques.append("Implementation summary from the ticket ledger is not reflected in the resolution report.")
+        critiques.append("Implementation summary supplied by the work item is not reflected in the resolution report.")
 
     if not re.search(r"(?im)(commit|pr|pull request|file|module|test)", text):
         critiques.append("Implementation Summary must cite concrete evidence (files, commits, PR, or tests).")
