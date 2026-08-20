@@ -249,28 +249,39 @@ Follow-ups raised on review of the branch itself.
 because the checkout root is not writable by the account that added it. Moving
 it to `./mypy.ini` removes the `--config-file` flag from CI.
 
-### Open Question
+### Declared Progress
 
-Stall detection compares the handler's `product`, so a product field that
-changes between attempts without representing progress disables the fast-fail
-entirely -- the same failure mode as the old top-level denylist, relocated.
-Measured: a handler with one growing undeclared field runs 25 times where the
-same handler with a stable product runs 2. Nothing enforces the invariant that
-non-progress data stays out of the product.
+The open question is closed. Stall detection compared whole handler results, so
+it rested on an invariant nothing enforced -- keep non-progress data out of the
+result -- which is the field denylist failure mode relocated rather than removed.
 
-`write-spec` is exposed to this in principle: its handler returns `mistakes`,
-which `append_mistake` grows when the reflection engine blocks. It converges at
-2 invocations today because the block happens at reflection attempt 3 and the
-stall fires first, but that is an observation about ordering, not a guarantee.
+A manifest that declares an `output_signature` has already said which fields
+carry its result, so that declaration is now the comparison basis.
+`progress_signature` projects a result onto the union of the contract's declared
+and required fields and returns `WholeProduct | DeclaredFields`. A manifest that
+declares nothing keeps the conservative whole-result comparison, matching how
+unclassified failures are treated: an undetected stall wastes a budget, a
+wrongly detected one halts work that was still moving.
 
-Worth noting that 8 of the 13 shipped manifests declare fewer output properties
-than their handler returns, and 6 declare none at all -- so projecting the
-comparison onto the declared `output_signature` is available as a fix, at the
-cost of making stall detection critique-only for those 6.
+`RetryContext` became `NoPreviousAttempt | PreviousAttempt`, replacing an
+`Any`-typed signature defaulting to `None`, and `_stalled` matches over it
+exhaustively under mypy.
+
+Measured with a retry budget of 25:
+
+| Scenario | Before | After |
+|---|---|---|
+| Declared contract, growing undeclared field | 25 | 2 |
+| Declared contract, declared field advances | 25 | 25 |
+| No declared contract, growing field | 25 | 25 |
+
+`write-spec` declares 5 of the 9 fields its handler returns; `mistakes` is not
+among them and can no longer mask a stall. It still settles in 2 invocations and
+still emits all 13 wire keys.
 
 ### Still Open
 
-The open question above. No known defects.
+None.
 
 ## Verification
 
