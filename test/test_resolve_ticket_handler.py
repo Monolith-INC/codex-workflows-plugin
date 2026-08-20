@@ -23,10 +23,10 @@ class TestResolveTicketHandler(unittest.TestCase):
                         instructions="# resolve-ticket\n",
                     )
                 )
-                self.assertEqual(result["mode"], "instructions")
-                self.assertTrue(result["resolution_required"])
-                self.assertIsNotNone(result["resolve_directive"])
-                self.assertIn("template", result)
+                self.assertEqual(result.product["mode"], "instructions")
+                self.assertTrue(result.product["resolution_required"])
+                self.assertIsNotNone(result.product["resolve_directive"])
+                self.assertIn("template", result.product)
 
     def test_resolve_ticket_critic_flags_thin_draft(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -45,7 +45,7 @@ class TestResolveTicketHandler(unittest.TestCase):
                         instructions="# resolve-ticket\n",
                     )
                 )
-                self.assertTrue(result["critiques"])
+                self.assertTrue(result.product["critiques"])
 
 
 if __name__ == "__main__":

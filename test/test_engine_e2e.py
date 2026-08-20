@@ -9,6 +9,7 @@ from unittest import mock
 
 from scripts.orchestrator import handlers
 from scripts.orchestrator.engine import OrchestratorEngine
+from scripts.orchestrator.invocation import HandlerResult
 from scripts.orchestrator.mcp_server import process_message
 
 
@@ -160,11 +161,10 @@ class TestOrchestratorEngineE2E(unittest.TestCase):
 
         def handler(invocation):
             seen.append(invocation)
-            return {
-                "mode": "instructions",
-                "critiques": "still wrong",
-                "reflection": {"attempt": invocation.attempt + 1, "blocked": False},
-            }
+            return HandlerResult(
+                product={"mode": "instructions", "critiques": "still wrong"},
+                reflection={"attempt": invocation.attempt + 1, "blocked": False},
+            )
 
         self._stub_skill("nested-skill")
         engine = OrchestratorEngine(self.skills_dir, max_retries=50)
@@ -182,11 +182,13 @@ class TestOrchestratorEngineE2E(unittest.TestCase):
 
         def handler(invocation):
             seen.append((invocation.attempt, dict(invocation.arguments)))
-            return {
-                "mode": "instructions",
-                "critiques": f"attempt {invocation.attempt} rejected",
-                "reflection": {"attempt": invocation.attempt + 1},
-            }
+            return HandlerResult(
+                product={
+                    "mode": "instructions",
+                    "critiques": f"attempt {invocation.attempt} rejected",
+                },
+                reflection={"attempt": invocation.attempt + 1},
+            )
 
         self._stub_skill("counting-skill")
         engine = OrchestratorEngine(self.skills_dir, max_retries=3)
@@ -202,10 +204,12 @@ class TestOrchestratorEngineE2E(unittest.TestCase):
 
         def handler(invocation):
             seen.append(invocation.attempt)
-            return {
-                "mode": "instructions",
-                "critiques": f"attempt {invocation.attempt} rejected",
-            }
+            return HandlerResult(
+                product={
+                    "mode": "instructions",
+                    "critiques": f"attempt {invocation.attempt} rejected",
+                }
+            )
 
         self._stub_skill("resuming-skill")
         engine = OrchestratorEngine(self.skills_dir, max_retries=3)
@@ -237,10 +241,12 @@ class TestOrchestratorEngineE2E(unittest.TestCase):
             attempts.append(invocation.attempt)
             # Vary the result so the run uses its whole retry budget rather than
             # halting on the stall check; every retry must satisfy the contract.
-            return {
-                "mode": "instructions",
-                "critiques": f"attempt {invocation.attempt} rejected",
-            }
+            return HandlerResult(
+                product={
+                    "mode": "instructions",
+                    "critiques": f"attempt {invocation.attempt} rejected",
+                }
+            )
 
         engine = OrchestratorEngine(self.skills_dir, max_retries=3)
         with mock.patch.dict(handlers._HANDLERS, {"strict-arguments": handler}):
@@ -248,6 +254,51 @@ class TestOrchestratorEngineE2E(unittest.TestCase):
 
         self.assertEqual(attempts, [0, 1, 2])
         self.assertNotIn("Unknown argument", result.error or "")
+
+    def test_a_strict_output_signature_ignores_what_the_worker_adds(self):
+        """The envelope is presentation; only the work is held to the contract."""
+        self._write_skill(
+            "strict-output",
+            {
+                "name": "strict-output",
+                "description": "declares exactly its output",
+                "input_schema": {"type": "object", "properties": {}},
+                "output_signature": {
+                    "type": "object",
+                    "required": ["mode"],
+                    "properties": {"mode": {"type": "string"}},
+                    "additionalProperties": False,
+                },
+            },
+            "# strict-output\n",
+        )
+
+        def handler(invocation):
+            return HandlerResult(
+                product={"mode": "completed"},
+                reflection={"attempt": invocation.attempt + 1},
+            )
+
+        engine = OrchestratorEngine(self.skills_dir, max_retries=2)
+        with mock.patch.dict(handlers._HANDLERS, {"strict-output": handler}):
+            result = engine.run_tool_call("strict-output", {})
+
+        self.assertTrue(result.ok, result.error)
+        self.assertEqual(result.output["attempt"], 1)
+        self.assertEqual(result.output["reflection"], {"attempt": 1})
+        self.assertIn("prompt", result.output)
+
+    def test_a_handler_that_ignores_the_result_contract_says_so(self):
+        def handler(invocation):
+            return {"mode": "completed"}
+
+        self._stub_skill("legacy-shape")
+        engine = OrchestratorEngine(self.skills_dir, max_retries=1)
+        with mock.patch.dict(handlers._HANDLERS, {"legacy-shape": handler}):
+            result = engine.run_tool_call("legacy-shape", {})
+
+        self.assertFalse(result.ok)
+        self.assertIn("must return a HandlerResult", result.error or "")
 
     def test_an_operator_approval_resumes_a_halted_run(self):
         stalled = {"mode": "instructions", "critiques": "identical every time"}
@@ -257,7 +308,7 @@ class TestOrchestratorEngineE2E(unittest.TestCase):
         def handler(invocation):
             index = len(seen)
             seen.append(index)
-            return dict(scripted[min(index, len(scripted) - 1)])
+            return HandlerResult(product=scripted[min(index, len(scripted) - 1)])
 
         self._stub_skill("approved-skill")
         engine = OrchestratorEngine(
@@ -277,7 +328,9 @@ class TestOrchestratorEngineE2E(unittest.TestCase):
 
         def handler(invocation):
             seen.append(None)
-            return {"mode": "instructions", "critiques": "identical every time"}
+            return HandlerResult(
+                product={"mode": "instructions", "critiques": "identical every time"}
+            )
 
         self._stub_skill("denied-skill")
         engine = OrchestratorEngine(

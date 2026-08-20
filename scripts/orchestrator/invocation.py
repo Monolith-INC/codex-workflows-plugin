@@ -1,4 +1,4 @@
-"""What one handler run receives.
+"""The handler boundary: what one run receives, and what it produced.
 
 Orchestration metadata used to be written into the caller's ``arguments`` dict
 on every retry. That conflated two channels: a manifest declares what the caller
@@ -28,3 +28,22 @@ class Invocation:
     def __post_init__(self) -> None:
         object.__setattr__(self, "arguments", deep_freeze(self.arguments))
         object.__setattr__(self, "manifest", deep_freeze(self.manifest))
+
+
+@dataclass(frozen=True)
+class HandlerResult:
+    """What a handler produced, with its own bookkeeping kept separate.
+
+    ``product`` is the work: the only thing evaluated against the manifest's
+    output contract, and the only thing compared between attempts. ``reflection``
+    is the handler's retry state, which advances on every pass by design --
+    folding it into the product made each attempt look like progress and left
+    stall detection with nothing stable to compare.
+    """
+
+    product: Mapping[str, Any] = field(default_factory=FrozenDict)
+    reflection: Mapping[str, Any] = field(default_factory=FrozenDict)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "product", deep_freeze(self.product))
+        object.__setattr__(self, "reflection", deep_freeze(self.reflection))

@@ -136,7 +136,7 @@ class OrchestratorEngine:
         while True:
             current = stream.state.tasks[task_id]
             try:
-                output = execute_skill(
+                run = execute_skill(
                     name,
                     arguments,
                     skills_dir=str(self.skills_dir),
@@ -164,19 +164,21 @@ class OrchestratorEngine:
                     case unexpected:  # pragma: no cover - exhaustiveness guard
                         raise AssertionError(f"non-exhaustive NextStep: {unexpected!r}")
 
+            # Only the work is evaluated and compared. The reflection state and
+            # the worker's envelope change on every attempt by design.
             critiques = collect_critiques(
-                output,
+                run.product,
                 manifest,
                 semantic_evaluator=self.semantic_evaluator,
             )
+            output = run.to_wire()
             if not critiques:
                 stream.dispatch(
                     Event(type="TaskCompletedEvent", payload={"task_id": task_id, "output": output})
                 )
                 return ToolCallResult(ok=True, output=output, task_id=task_id, state=TaskState.COMPLETED.value)
 
-            signature = _stall_signature(output)
-            stalled = context.matches(signature, critiques)
+            stalled = context.matches(run.product, critiques)
             failure: dict[str, Any] = {
                 "task_id": task_id,
                 "critique": "; ".join(critiques),
@@ -188,7 +190,9 @@ class OrchestratorEngine:
             # A stall that an operator then approves must not re-detect itself on
             # the next attempt, or the approval would be a no-op.
             context = (
-                RetryContext() if stalled else RetryContext(signature, tuple(critiques))
+                RetryContext()
+                if stalled
+                else RetryContext(run.product, tuple(critiques))
             )
 
             match _next_step(stream.state.tasks[task_id], self.max_retries):
@@ -207,26 +211,3 @@ class OrchestratorEngine:
                     )
                 case unexpected:  # pragma: no cover - exhaustiveness guard
                     raise AssertionError(f"non-exhaustive NextStep: {unexpected!r}")
-
-
-_VOLATILE_OUTPUT_FIELDS = frozenset({"attempt", "prompt", "reflection_critiques"})
-
-
-def _stall_signature(output: Any) -> Any:
-    """Project out orchestration metadata that changes even when work does not.
-
-    The worker adds a prompt and an attempt number on every retry, and handlers
-    nest their own reflection state carrying the same counter. Comparing those
-    made deterministic handler output look different on every pass and left
-    stall detection unable to fire. Stripping only the top level was the same
-    bug one layer down, so the projection recurses.
-    """
-    if isinstance(output, dict):
-        return {
-            key: _stall_signature(value)
-            for key, value in output.items()
-            if key not in _VOLATILE_OUTPUT_FIELDS
-        }
-    if isinstance(output, (list, tuple)):
-        return tuple(_stall_signature(item) for item in output)
-    return output

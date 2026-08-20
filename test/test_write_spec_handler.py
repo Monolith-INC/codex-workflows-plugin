@@ -17,8 +17,8 @@ class TestWriteSpecHandler(unittest.TestCase):
                 instructions="# write-spec\n",
             )
         )
-        self.assertEqual(result["mode"], "instructions")
-        self.assertIn("template", result)
+        self.assertEqual(result.product["mode"], "instructions")
+        self.assertIn("template", result.product)
 
     def test_write_spec_critic_flags_bad_draft(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -34,8 +34,8 @@ class TestWriteSpecHandler(unittest.TestCase):
                         instructions="# write-spec\n",
                     )
                 )
-                self.assertEqual(result["mode"], "instructions")
-                self.assertTrue(result["critiques"])
+                self.assertEqual(result.product["mode"], "instructions")
+                self.assertTrue(result.product["critiques"])
 
 
 class TestStartTicketSpecHook(unittest.TestCase):
@@ -66,9 +66,9 @@ class TestStartTicketSpecHook(unittest.TestCase):
                         instructions="# start-ticket\n",
                     )
                 )
-                self.assertTrue(result["generation_required"])
-                self.assertIsNotNone(result["write_spec_directive"])
-                self.assertIn("tech-spec", result["write_spec_directive"]["missing_kinds"])
+                self.assertTrue(result.product["generation_required"])
+                self.assertIsNotNone(result.product["write_spec_directive"])
+                self.assertIn("tech-spec", result.product["write_spec_directive"]["missing_kinds"])
 
 
 if __name__ == "__main__":
