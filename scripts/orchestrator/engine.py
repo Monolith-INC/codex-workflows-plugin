@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from functools import partial
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -9,11 +10,17 @@ from typing import Any
 
 from .evaluator import SemanticEvaluator, collect_critiques, legacy_semantic_evaluator
 from .hooks import authorization_hook, cli_ui_hook
+from .invocation import HandlerContractError
 from .manifests import manifest_by_name
 from .schema import validate_inputs
 from .state import Event, QueueState, Task, TaskState
 from .stream import OrchestratorStream
 from .worker import execute_skill
+
+
+@dataclass(frozen=True)
+class Raised:
+    """Signature for an attempt that ended in an exception rather than output."""
 
 
 @dataclass(frozen=True)
@@ -87,12 +94,14 @@ class OrchestratorEngine:
         skills_dir: str | Path,
         *,
         max_retries: int = 3,
+        max_approvals: int = 1,
         interactive: bool = False,
         quiet: bool = False,
         semantic_evaluator: SemanticEvaluator = legacy_semantic_evaluator,
     ):
         self.skills_dir = Path(skills_dir)
         self.max_retries = max_retries
+        self.max_approvals = max_approvals
         self.interactive = interactive
         self.quiet = quiet
         self.semantic_evaluator = semantic_evaluator
@@ -102,7 +111,9 @@ class OrchestratorEngine:
         if not self.quiet:
             stream.subscribe(cli_ui_hook)
         if self.interactive:
-            stream.subscribe(authorization_hook)
+            stream.subscribe(
+                partial(authorization_hook, max_approvals=self.max_approvals)
+            )
 
     def list_tools(self) -> list[dict[str, Any]]:
         return [
@@ -144,9 +155,20 @@ class OrchestratorEngine:
                     task=current,
                 )
             except Exception as exc:
-                stream.dispatch(
-                    Event(type="TaskFailedEvent", payload={"task_id": task_id, "critique": str(exc)})
+                # A raise gets the same no-progress treatment as a rejected
+                # result: repeating a deterministic failure is not an attempt.
+                reason = str(exc)
+                stalled = isinstance(exc, HandlerContractError) or context.matches(
+                    Raised(), (reason,)
                 )
+                failure: dict[str, Any] = {"task_id": task_id, "critique": reason}
+                if stalled:
+                    failure = {**failure, "halt": True}
+                stream.dispatch(Event(type="TaskFailedEvent", payload=failure))
+                context = (
+                    RetryContext() if stalled else RetryContext(Raised(), (reason,))
+                )
+
                 match _next_step(stream.state.tasks[task_id], self.max_retries):
                     case Retry():
                         stream.dispatch(
@@ -157,7 +179,7 @@ class OrchestratorEngine:
                         return ToolCallResult(
                             ok=False,
                             output=None,
-                            error=str(exc),
+                            error=reason,
                             task_id=task_id,
                             state=state,
                         )

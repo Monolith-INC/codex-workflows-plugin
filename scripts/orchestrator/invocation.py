@@ -47,3 +47,7 @@ class HandlerResult:
     def __post_init__(self) -> None:
         object.__setattr__(self, "product", deep_freeze(self.product))
         object.__setattr__(self, "reflection", deep_freeze(self.reflection))
+
+
+class HandlerContractError(TypeError):
+    """A handler violated its protocol. Retrying the same code cannot help."""

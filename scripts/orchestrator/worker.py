@@ -6,7 +6,7 @@ from typing import Any
 
 from .adapters import to_anthropic_dialect
 from .handlers import get_handler
-from .invocation import HandlerResult, Invocation
+from .invocation import HandlerContractError, HandlerResult, Invocation
 from .manifests import CapabilityManifest, load_skill_instructions
 from .schema import validate_inputs
 from .state import FrozenDict, Task, TaskState
@@ -83,7 +83,7 @@ def execute_skill(
     )
 
     if not isinstance(result, HandlerResult):
-        raise TypeError(
+        raise HandlerContractError(
             f"Handler for '{skill_name}' returned {type(result).__name__}; "
             "handlers must return a HandlerResult."
         )

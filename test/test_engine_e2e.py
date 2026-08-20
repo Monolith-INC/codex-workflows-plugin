@@ -288,17 +288,141 @@ class TestOrchestratorEngineE2E(unittest.TestCase):
         self.assertEqual(result.output["reflection"], {"attempt": 1})
         self.assertIn("prompt", result.output)
 
-    def test_a_handler_that_ignores_the_result_contract_says_so(self):
+    def test_a_deterministic_raise_halts_on_the_second_attempt(self):
+        """Repeating a failure that cannot change is not an attempt."""
+        raised = []
+
         def handler(invocation):
+            raised.append(invocation.attempt)
+            raise ValueError("the vault is not writable")
+
+        self._stub_skill("raising-skill")
+        engine = OrchestratorEngine(self.skills_dir, max_retries=25)
+        with mock.patch.dict(handlers._HANDLERS, {"raising-skill": handler}):
+            result = engine.run_tool_call("raising-skill", {})
+
+        self.assertEqual(raised, [0, 1])
+        self.assertFalse(result.ok)
+        self.assertEqual(result.error, "the vault is not writable")
+        self.assertEqual(result.state, "Blocked_Requires_Review")
+
+    def test_a_varying_raise_still_uses_its_retry_budget(self):
+        raised = []
+
+        def handler(invocation):
+            raised.append(invocation.attempt)
+            raise ValueError(f"transient failure {invocation.attempt}")
+
+        self._stub_skill("flaky-skill")
+        engine = OrchestratorEngine(self.skills_dir, max_retries=3)
+        with mock.patch.dict(handlers._HANDLERS, {"flaky-skill": handler}):
+            result = engine.run_tool_call("flaky-skill", {})
+
+        self.assertEqual(raised, [0, 1, 2])
+        self.assertEqual(result.state, "Blocked_Requires_Review")
+
+    def test_a_handler_protocol_violation_halts_immediately(self):
+        """Retrying the same code cannot fix the code."""
+        calls = []
+
+        def handler(invocation):
+            calls.append(invocation.attempt)
             return {"mode": "completed"}
 
         self._stub_skill("legacy-shape")
-        engine = OrchestratorEngine(self.skills_dir, max_retries=1)
+        engine = OrchestratorEngine(self.skills_dir, max_retries=25)
         with mock.patch.dict(handlers._HANDLERS, {"legacy-shape": handler}):
             result = engine.run_tool_call("legacy-shape", {})
 
+        self.assertEqual(calls, [0])
         self.assertFalse(result.ok)
         self.assertIn("must return a HandlerResult", result.error or "")
+        self.assertEqual(result.state, "Blocked_Requires_Review")
+
+    def test_the_policy_denial_no_longer_repeats_itself(self):
+        start_dir = self.skills_dir / "start-ticket"
+        start_dir.mkdir()
+        (start_dir / "manifest.json").write_text(
+            (Path(__file__).parent.parent / "skills" / "start-ticket" / "manifest.json").read_text(),
+            encoding="utf-8",
+        )
+        (start_dir / "SKILL.md").write_text("# start-ticket\n", encoding="utf-8")
+
+        vault = "AI_Codex"
+        active_dir = Path(self.tempdir.name) / "project" / vault / "Tickets" / "Active"
+        active_dir.mkdir(parents=True)
+        (active_dir / "task-999.md").write_text("existing\n", encoding="utf-8")
+
+        attempts = []
+        real = handlers.handle_start_ticket
+
+        def counting(invocation):
+            attempts.append(invocation.attempt)
+            return real(invocation)
+
+        with mock.patch.dict(
+            os.environ,
+            {
+                "CODEX_PROJECT_ROOT": str(Path(self.tempdir.name) / "project"),
+                "CODEX_VAULT_FOLDER": vault,
+            },
+        ):
+            with mock.patch.dict(handlers._HANDLERS, {"start-ticket": counting}):
+                engine = OrchestratorEngine(self.skills_dir)
+                result = engine.run_tool_call("start-ticket", {"ticket_id": "task-123"})
+
+        self.assertEqual(attempts, [0, 1])
+        self.assertFalse(result.ok)
+        self.assertIn("already an active ticket", result.error or "")
+
+    def test_an_unconditional_approver_still_terminates(self):
+        """An approval restores the retry budget, so the hook has to bound them."""
+        seen: list[int] = []
+
+        def handler(invocation):
+            seen.append(invocation.attempt)
+            return HandlerResult(
+                product={"mode": "instructions", "critiques": "identical every time"}
+            )
+
+        self._stub_skill("looping-skill")
+        engine = OrchestratorEngine(
+            self.skills_dir, max_retries=50, interactive=True, quiet=True
+        )
+        with mock.patch.dict(handlers._HANDLERS, {"looping-skill": handler}):
+            with mock.patch(
+                "builtins.input", return_value="IMPLEMENTATION APPROVED"
+            ) as prompted:
+                with contextlib.redirect_stderr(io.StringIO()):
+                    result = engine.run_tool_call("looping-skill", {})
+
+        self.assertEqual(prompted.call_count, 1, "one approval is honored by default")
+        self.assertFalse(result.ok)
+        self.assertEqual(result.state, "Blocked_Requires_Review")
+
+    def test_the_approval_budget_is_configurable(self):
+        def handler(invocation):
+            return HandlerResult(
+                product={"mode": "instructions", "critiques": "identical every time"}
+            )
+
+        self._stub_skill("twice-approved")
+        engine = OrchestratorEngine(
+            self.skills_dir,
+            max_retries=50,
+            max_approvals=2,
+            interactive=True,
+            quiet=True,
+        )
+        with mock.patch.dict(handlers._HANDLERS, {"twice-approved": handler}):
+            with mock.patch(
+                "builtins.input", return_value="IMPLEMENTATION APPROVED"
+            ) as prompted:
+                with contextlib.redirect_stderr(io.StringIO()):
+                    result = engine.run_tool_call("twice-approved", {})
+
+        self.assertEqual(prompted.call_count, 2)
+        self.assertEqual(result.state, "Blocked_Requires_Review")
 
     def test_an_operator_approval_resumes_a_halted_run(self):
         stalled = {"mode": "instructions", "critiques": "identical every time"}
