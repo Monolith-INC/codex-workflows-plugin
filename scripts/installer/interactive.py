@@ -28,7 +28,6 @@ _PROJECT_MARKERS = (
     "composer.json",
     "Gemfile",
     ".codex-plugin",
-    "AI_Codex",
 )
 
 _TARGET_CHOICES = (
@@ -40,6 +39,23 @@ _TARGET_CHOICES = (
     ("antigravity", "Antigravity IDE"),
 )
 
+_TRACKER_CHOICES = (
+    ("linear", "Linear (issues, projects, comments)"),
+    ("azure_devops", "Azure DevOps Boards (work items)"),
+)
+
+_SCM_CHOICES = (
+    ("github", "GitHub (gh CLI)"),
+    ("azure_repos", "Azure Repos"),
+)
+
+_BRANCH_PRESETS = (
+    ("{category}/{key}-{slug}", "category/key-slug (recommended)"),
+    ("{key}-{slug}", "key-slug"),
+    ("{user}/{category}/{key}-{slug}", "user/category/key-slug"),
+    ("other", "Enter a custom convention"),
+)
+
 
 @dataclass
 class WizardAnswers:
@@ -47,6 +63,10 @@ class WizardAnswers:
     target: str = "all-agents"
     uninstall: bool = False
     keep_runtime: bool = False
+    tracker: str = "linear"
+    scm: str = "github"
+    tracker_scope: str = ""
+    branch_template: str = "{category}/{key}-{slug}"
 
 
 @dataclass
@@ -225,14 +245,31 @@ def collect_answers(io: WizardIO, *, cwd: Path | None = None) -> WizardAnswers:
         default="all-agents",
     )
 
+    tracker = _ask_choice(io, "Which tracker should workflow operations use?", list(_TRACKER_CHOICES), default="linear")
+    tracker_scope = _ask(io, "Tracker workspace/project/team scope (optional; use auto to discover)", default="auto")
+    scm = _ask_choice(io, "Which SCM should handle pull requests?", list(_SCM_CHOICES), default="github")
+    branch_template = _ask_choice(io, "Choose the branch naming convention", list(_BRANCH_PRESETS), default=_BRANCH_PRESETS[0][0])
+    if branch_template == "other":
+        branch_template = _ask(io, "Custom branch template (must contain {key})", default="{category}/{key}-{slug}")
+
     _print(io, "")
     _print(io, "Summary")
     _print(io, f"  Action : install")
     _print(io, f"  Dest   : {dest}")
     _print(io, f"  Target : {target}")
+    _print(io, f"  Tracker: {tracker} ({tracker_scope or 'auto'})")
+    _print(io, f"  SCM    : {scm}")
+    _print(io, f"  Branch : {branch_template}")
     if not _ask_yes_no(io, "Proceed with installation?", default=True):
         raise SystemExit("Cancelled.")
-    return WizardAnswers(dest=dest, target=target)
+    return WizardAnswers(
+        dest=dest,
+        target=target,
+        tracker=tracker,
+        scm=scm,
+        tracker_scope=tracker_scope,
+        branch_template=branch_template,
+    )
 
 
 def run_bootstrap(
@@ -253,6 +290,9 @@ def run_bootstrap(
             argv.append("--keep-runtime")
     else:
         argv.extend(["--target", answers.target])
+        argv.extend(["--tracker", answers.tracker, "--scm", answers.scm, "--branch-template", answers.branch_template])
+        if answers.tracker_scope:
+            argv.extend(["--tracker-scope", answers.tracker_scope])
     if install_dir is not None:
         argv.extend(["--install-dir", str(install_dir)])
 
@@ -309,6 +349,15 @@ def verify_install(dest: Path, target: str) -> list[CheckResult]:
         remedy_key="rewire",
     )
 
+    integration_config = dest / ".codex-workflows" / "integrations.json"
+    add(
+        "integration-config",
+        integration_config.is_file(),
+        "tracker/SCM integration configuration present" if integration_config.is_file() else "integration configuration missing; run bootstrap selections",
+        remediable=True,
+        remedy_key="rewire",
+    )
+
     hook_script = runtime / "skills" / "codex_workflows" / "scripts" / "claude_enforce_hook.py"
     add(
         "runtime-hooks",
@@ -347,12 +396,15 @@ def verify_install(dest: Path, target: str) -> list[CheckResult]:
     orchestrator_ok = False
     pythonpath_ok = False
     skills_ok = False
+    gateway_ok = False
     if mcp_path.is_file():
         try:
             payload = json.loads(mcp_path.read_text(encoding="utf-8"))
             server = (payload.get("mcpServers") or {}).get("agentic-orchestrator") or {}
+            gateway = (payload.get("mcpServers") or {}).get("workflow-integrations") or {}
             env = server.get("env") or {}
             orchestrator_ok = isinstance(server, dict) and bool(server.get("command"))
+            gateway_ok = isinstance(gateway, dict) and bool(gateway.get("command"))
             pythonpath = Path(str(env.get("PYTHONPATH", "")))
             skills_dir = Path(str(env.get("ORCHESTRATOR_SKILLS_DIR", "")))
             pythonpath_ok = pythonpath.is_dir()
@@ -363,6 +415,13 @@ def verify_install(dest: Path, target: str) -> list[CheckResult]:
         "mcp-orchestrator",
         orchestrator_ok,
         "agentic-orchestrator present in .mcp.json" if orchestrator_ok else ".mcp.json missing agentic-orchestrator",
+        remediable=True,
+        remedy_key="rewire",
+    )
+    add(
+        "mcp-integrations",
+        gateway_ok,
+        "workflow-integrations present in .mcp.json" if gateway_ok else ".mcp.json missing workflow-integrations",
         remediable=True,
         remedy_key="rewire",
     )

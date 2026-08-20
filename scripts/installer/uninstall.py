@@ -10,13 +10,7 @@ from .targets import Target, target_config_paths
 
 
 PLUGIN_NAME = "codex-workflows-plugin"
-_MANAGED_HOOK_SCRIPTS = {
-    "codex_enforce_hook.py",
-    "gemini_enforce_hook.py",
-    "antigravity_enforce_hook.py",
-    "claude_enforce_hook.py",
-    "cursor_enforce_hook.py",
-}
+_MANAGED_HOOK_MARKERS = ("codex-workflows-plugin", "codex_workflows", "workflow-integrations")
 
 
 @dataclass
@@ -111,7 +105,7 @@ def _strip_value(value: Any) -> Any:
 
 
 def _is_managed_command(command: str) -> bool:
-    return any(script_name in command for script_name in _MANAGED_HOOK_SCRIPTS)
+    return any(marker in command for marker in _MANAGED_HOOK_MARKERS)
 
 
 def _is_empty(value: Any) -> bool:
@@ -212,11 +206,12 @@ def _plan_mcp_cleanup(plan: UninstallPlan, project_root: Path) -> None:
         plan.messages.append(f"Skipped invalid JSON MCP config: {mcp_path}")
         return
     servers = payload.get("mcpServers")
-    if not isinstance(servers, dict) or "agentic-orchestrator" not in servers:
+    if not isinstance(servers, dict) or not ({"agentic-orchestrator", "workflow-integrations"} & set(servers)):
         return
     cleaned = dict(payload)
     cleaned_servers = dict(servers)
     cleaned_servers.pop("agentic-orchestrator", None)
+    cleaned_servers.pop("workflow-integrations", None)
     cleaned["mcpServers"] = cleaned_servers
     if not cleaned_servers and set(cleaned) <= {"mcpServers"}:
         _plan_remove_path(plan, mcp_path, prune_stop=project_root)
@@ -229,7 +224,7 @@ def _plan_codex_mcp_cleanup(plan: UninstallPlan, project_root: Path) -> None:
     config_path = project_root / ".codex" / "config.toml"
     if not config_path.exists():
         return
-    cleaned = _strip_codex_mcp_server_sections(config_path.read_text(encoding="utf-8"), {"agentic-orchestrator"})
+    cleaned = _strip_codex_mcp_server_sections(config_path.read_text(encoding="utf-8"), {"agentic-orchestrator", "workflow-integrations"})
     if cleaned:
         plan.write_text[config_path] = cleaned.rstrip() + "\n"
         plan.messages.append(f"Write cleaned Codex MCP config: {config_path}")
@@ -247,11 +242,12 @@ def _plan_cursor_mcp_cleanup(plan: UninstallPlan, project_root: Path) -> None:
         plan.messages.append(f"Skipped invalid JSON Cursor MCP config: {cursor_path}")
         return
     servers = payload.get("mcpServers") if isinstance(payload, dict) else None
-    if not isinstance(servers, dict) or "agentic-orchestrator" not in servers:
+    if not isinstance(servers, dict) or not ({"agentic-orchestrator", "workflow-integrations"} & set(servers)):
         return
     cleaned = dict(payload)
     cleaned_servers = dict(servers)
     cleaned_servers.pop("agentic-orchestrator", None)
+    cleaned_servers.pop("workflow-integrations", None)
     cleaned["mcpServers"] = cleaned_servers
     if not cleaned_servers and set(cleaned) <= {"mcpServers"}:
         _plan_remove_path(plan, cursor_path, prune_stop=project_root)
@@ -272,10 +268,10 @@ def _plan_claude_mcp_enablement_cleanup(plan: UninstallPlan, project_root: Path)
     if not isinstance(payload, dict):
         return
     enabled = payload.get("enabledMcpjsonServers")
-    if not isinstance(enabled, list) or "agentic-orchestrator" not in enabled:
+    if not isinstance(enabled, list) or not ({"agentic-orchestrator", "workflow-integrations"} & set(enabled)):
         return
     cleaned = dict(payload)
-    cleaned["enabledMcpjsonServers"] = [name for name in enabled if name != "agentic-orchestrator"]
+    cleaned["enabledMcpjsonServers"] = [name for name in enabled if name not in {"agentic-orchestrator", "workflow-integrations"}]
     if (
         not cleaned["enabledMcpjsonServers"]
         and cleaned.get("enableAllProjectMcpServers") is True

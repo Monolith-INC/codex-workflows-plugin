@@ -1,7 +1,7 @@
 {
   "name": "codex-workflows-plugin",
   "version": "0.5.20",
-  "description": "Client-adaptive workflow and enforcement plugin for Codex-style agent hosts",
+  "description": "Provider-neutral workflow orchestration with adapter-backed tracker and SCM integrations",
   "author": {
     "name": "agentrick"
   },
@@ -9,8 +9,8 @@
   "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "Codex Workflows",
-    "shortDescription": "Workflow enforcement and session governance",
-    "longDescription": "A client-adaptive plugin for workflow enforcement, session bootstrapping, and ticket lifecycle coordination.",
+    "shortDescription": "Adapter-backed work-item workflows",
+    "longDescription": "A client-adaptive plugin for generic work-item workflows, adapter-backed artifacts, and enforced branch and completion hooks.",
     "developerName": "agentrick",
     "category": "Productivity",
     "capabilities": [
@@ -18,7 +18,7 @@
       "Write"
     ],
     "defaultPrompt": [
-      "Manage sessions and workflows"
+      "Bootstrap integrations and manage work-item workflows"
     ],
     "brandColor": "#3B82F6"
   }

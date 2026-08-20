@@ -17,20 +17,14 @@ from __future__ import annotations
 import argparse
 import json
 import shutil
+import subprocess
 import sys
 import zipfile
 from contextlib import contextmanager, nullcontext
 from pathlib import Path
 from typing import Iterator
 
-# Script filenames that belong to this plugin — used to strip stale hook entries.
-_MANAGED_HOOK_SCRIPTS = {
-    "codex_enforce_hook.py",
-    "gemini_enforce_hook.py",
-    "antigravity_enforce_hook.py",
-    "claude_enforce_hook.py",
-    "cursor_enforce_hook.py",
-}
+_MANAGED_HOOK_MARKERS = ("codex-workflows-plugin", "codex_workflows", "workflow-integrations")
 
 _RUNTIME_DIRS = ["scripts", "skills", "commands", ".agent", "hooks", ".codex-plugin"]
 
@@ -51,15 +45,18 @@ def default_install_dir(project_dest: Path) -> Path:
 
 def install_from_zip(zip_path: Path, dest: Path) -> None:
     """Extract a release zip to dest, replacing any prior installation."""
+    preserved = _preserve_project_config(dest)
     if dest.exists():
         shutil.rmtree(dest)
     dest.mkdir(parents=True)
     with zipfile.ZipFile(zip_path) as zf:
         zf.extractall(dest)
+    _restore_project_config(dest, preserved)
 
 
 def install_from_source(source_root: Path, dest: Path) -> None:
     """Copy runtime directories from source_root to dest."""
+    preserved = _preserve_project_config(dest)
     if dest.exists():
         shutil.rmtree(dest)
     dest.mkdir(parents=True)
@@ -72,6 +69,23 @@ def install_from_source(source_root: Path, dest: Path) -> None:
             dest / dirname,
             ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
         )
+    _restore_project_config(dest, preserved)
+
+
+def _preserve_project_config(dest: Path) -> str | None:
+    """Keep project integration choices while replacing managed runtime files."""
+    path = dest / "integrations.json"
+    try:
+        return path.read_text(encoding="utf-8") if path.is_file() else None
+    except OSError:
+        return None
+
+
+def _restore_project_config(dest: Path, content: str | None) -> None:
+    if content is None:
+        return
+    dest.mkdir(parents=True, exist_ok=True)
+    (dest / "integrations.json").write_text(content, encoding="utf-8")
 
 
 def strip_managed_hooks(config: dict, script_names: set[str]) -> dict:
@@ -99,7 +113,7 @@ def strip_managed_hooks(config: dict, script_names: set[str]) -> dict:
 
 
 def wire_orchestrator_mcp(install_dir: Path, project_dest: Path) -> bool:
-    """Merge MCP servers into project JSON, Cursor, Claude enablement, and Codex TOML."""
+    """Wire the unchanged orchestrator and the separate integration gateway."""
     mcp_path = project_dest / ".mcp.json"
     existing: dict = {"mcpServers": {}}
     if mcp_path.exists():
@@ -112,6 +126,7 @@ def wire_orchestrator_mcp(install_dir: Path, project_dest: Path) -> bool:
     install_root = install_dir.resolve()
     skills_dir = (install_root / "skills")
     launcher = install_root / "scripts" / "orchestrator" / "run_mcp_server.py"
+    gateway_launcher = install_root / "scripts" / "integrations" / "run_gateway.py"
     servers["agentic-orchestrator"] = {
         "command": "python3",
         "args": [str(launcher)],
@@ -119,6 +134,14 @@ def wire_orchestrator_mcp(install_dir: Path, project_dest: Path) -> bool:
             # Kept for hosts/tools that still import via ``python -m scripts…``.
             "PYTHONPATH": str(install_root),
             "ORCHESTRATOR_SKILLS_DIR": str(skills_dir),
+        },
+    }
+    servers["workflow-integrations"] = {
+        "command": "python3",
+        "args": [str(gateway_launcher)],
+        "env": {
+            "PYTHONPATH": str(install_root),
+            "CODEX_PROJECT_ROOT": str(project_dest.resolve()),
         },
     }
     try:
@@ -129,6 +152,116 @@ def wire_orchestrator_mcp(install_dir: Path, project_dest: Path) -> bool:
     except OSError:
         return False
     return True
+
+
+def configure_integrations(
+    project_dest: Path,
+    *,
+    tracker: str,
+    scm: str,
+    branch_template: str,
+    tracker_scope: str = "auto",
+    config_source: Path | None = None,
+) -> Path:
+    """Write provider-neutral setup while keeping provider details adapter-owned."""
+    if config_source is not None:
+        payload = json.loads(config_source.read_text(encoding="utf-8"))
+        if not isinstance(payload, dict):
+            raise ValueError("integration config must be a JSON object")
+        if payload.get("schemaVersion") != 1 or not isinstance(payload.get("branchTemplate"), str) or "{key}" not in payload["branchTemplate"]:
+            raise ValueError("integration config must declare schemaVersion 1 and branchTemplate containing {key}")
+        if not isinstance(payload.get("tracker"), dict) or not payload["tracker"].get("adapter"):
+            raise ValueError("integration config tracker.adapter is required")
+        if not isinstance(payload.get("scm"), dict) or not payload["scm"].get("adapter"):
+            raise ValueError("integration config scm.adapter is required")
+    else:
+        if "{key}" not in branch_template:
+            raise ValueError("branch template must contain {key}")
+        tracker_config = _default_tracker_config(tracker, tracker_scope)
+        tracker_config["branchPattern"] = branch_template
+        payload = {
+            "schemaVersion": 1,
+            "branchTemplate": branch_template,
+            "tracker": tracker_config,
+            "scm": _default_scm_config(scm, project_dest),
+        }
+    path = project_dest / ".codex-workflows" / "integrations.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return path
+
+
+def _default_tracker_config(provider: str, scope: str) -> dict:
+    if provider == "linear":
+        return {
+            "adapter": "linear",
+            "scope": scope,
+            "connection": {"command": "npx", "args": ["-y", "mcp-remote", "https://mcp.linear.app/mcp"]},
+            "mappings": {"kinds": {}, "states": {}},
+            "bindings": {
+                "get_work_item": "get_issue",
+                "search_work_items": "list_issues",
+                "create_work_item": "create_issue",
+                "list_children": "list_issues",
+                "transition_work_item": "update_issue",
+                "publish_artifact": "create_comment",
+                "list_artifacts": "list_comments",
+                "link_development_artifact": "create_comment",
+            },
+        }
+    if provider == "azure_devops":
+        return {
+            "adapter": "azure_devops",
+            "scope": scope,
+            "connection": {
+                "command": "npx",
+                "args": ["-y", "@azure-devops/mcp", "${AZURE_DEVOPS_ORG}", "-d", "core", "work-items", "repositories"],
+            },
+            "mappings": {"kinds": {}, "states": {}},
+            "bindings": {
+                "get_work_item": "wit_get_work_item",
+                "search_work_items": "wit_query_by_wiql",
+                "create_work_item": "wit_create_work_item",
+                "list_children": "wit_get_work_items",
+                "transition_work_item": "wit_update_work_item",
+                "publish_artifact": "wit_add_work_item_comment",
+                "list_artifacts": "wit_get_work_item_comments",
+                "link_development_artifact": "wit_add_artifact_link",
+            },
+        }
+    raise ValueError(f"unsupported tracker: {provider}")
+
+
+def _default_scm_config(provider: str, project_dest: Path) -> dict:
+    if provider == "github":
+        owner, repo = _github_remote(project_dest)
+        return {"adapter": "github", "owner": owner, "repo": repo, "connection": {"command": "gh", "args": []}, "bindings": {}}
+    if provider == "azure_repos":
+        return {
+            "adapter": "azure_repos",
+            "connection": {"command": "npx", "args": ["-y", "@azure-devops/mcp", "${AZURE_DEVOPS_ORG}", "-d", "core", "repositories", "work-items"]},
+            "bindings": {
+                "get_pull_request": "repo_get_pull_request_by_id",
+                "create_pull_request": "repo_create_pull_request",
+                "list_review_threads": "repo_list_pull_request_threads",
+                "reply_to_thread": "repo_reply_to_comment",
+                "link_work_item": "wit_link_work_item_to_pull_request",
+            },
+        }
+    raise ValueError(f"unsupported SCM: {provider}")
+
+
+def _github_remote(project_dest: Path) -> tuple[str, str]:
+    try:
+        remote = subprocess.run(["git", "-C", str(project_dest), "remote", "get-url", "origin"], capture_output=True, text=True, check=True).stdout.strip()
+    except (OSError, subprocess.CalledProcessError):
+        return "", ""
+    value = remote.removesuffix(".git")
+    if "github.com" not in value:
+        return "", value.rsplit("/", 1)[-1]
+    tail = value.split("github.com", 1)[-1].lstrip(":/")
+    parts = tail.split("/")
+    return (parts[-2], parts[-1]) if len(parts) >= 2 else ("", parts[-1] if parts else "")
 
 
 def _write_cursor_mcp_config(project_dest: Path, servers: dict) -> None:
@@ -347,9 +480,6 @@ def _install_import_path(install_dir: Path) -> Iterator[None]:
 def wire(install_dir: Path, target: str, project_dest: str | Path) -> int:
     """Wire hooks and discovery assets into a project. Global install is not supported."""
     with _install_import_path(install_dir):
-        from scripts.installer.purge_markdown_allowlist import (  # noqa: PLC0415
-            purge_allowlist_config_files,
-        )
         from scripts.installer.cli import install  # noqa: PLC0415
         from scripts.installer.cursor_hooks import (  # noqa: PLC0415
             desired_cursor_hooks,
@@ -359,14 +489,6 @@ def wire(install_dir: Path, target: str, project_dest: str | Path) -> int:
         from scripts.installer.targets import Target  # noqa: PLC0415
 
         dest_path = Path(project_dest).expanduser().resolve()
-        purge_report = purge_allowlist_config_files(
-            dest=dest_path,
-            dry_run=False,
-            include_cwd=False,
-        )
-        for message in purge_report.messages:
-            print(message)
-
         client_names = {
             "claude": "Claude CLI (claude-cli) & IDE plugin",
             "gemini": "Gemini CLI (gemini) [Deprecated]",
@@ -395,7 +517,7 @@ def wire(install_dir: Path, target: str, project_dest: str | Path) -> int:
                     if config_path.exists():
                         on_disk = json.loads(config_path.read_text(encoding="utf-8"))
                     if on_disk:
-                        on_disk = strip_managed_cursor_hooks(on_disk, _MANAGED_HOOK_SCRIPTS)
+                        on_disk = strip_managed_cursor_hooks(on_disk, set(_MANAGED_HOOK_MARKERS))
                     final_config = merge_cursor_hooks(on_disk, desired_cursor_hooks(hook_command))
                     config_path.parent.mkdir(parents=True, exist_ok=True)
                     config_path.write_text(json.dumps(final_config, indent=2) + "\n", encoding="utf-8")
@@ -492,7 +614,6 @@ def main() -> int:
             "  python3 -m scripts.installer.bootstrap --target all-agents --dest /my/project\n"
             "  python3 bootstrap.py plugin.zip --target all-agents --dest /my/project\n"
             "  python3 -m scripts.installer.bootstrap --uninstall --dest /my/project\n"
-            "  python3 -m scripts.installer.bootstrap --purge-allowlist --dest /my/project --target all-agents\n"
         ),
     )
     parser.add_argument(
@@ -509,9 +630,14 @@ def main() -> int:
         "--target",
         help="Agent host to wire: claude, codex, gemini, antigravity, cursor, all-agents.",
     )
+    parser.add_argument("--tracker", choices=("linear", "azure_devops"), help="Tracker adapter to configure.")
+    parser.add_argument("--scm", choices=("github", "azure_repos"), help="SCM adapter to configure.")
+    parser.add_argument("--tracker-scope", default="auto", help="Tracker workspace/project/team scope.")
+    parser.add_argument("--branch-template", default="{category}/{key}-{slug}", help="Branch format containing {key}.")
+    parser.add_argument("--integration-config", type=Path, help="Validated integration JSON to install.")
     parser.add_argument(
         "--dest",
-        help="Required project root for local install, wire, uninstall, and purge re-wire.",
+        help="Required project root for local install, wire, and uninstall.",
     )
     parser.add_argument(
         "--uninstall",
@@ -526,20 +652,7 @@ def main() -> int:
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="With --uninstall or --purge-allowlist, print planned changes without modifying files.",
-    )
-    parser.add_argument(
-        "--purge-allowlist",
-        action="store_true",
-        help=(
-            "Scan/strip legacy markdown-allowlist artifacts under --dest. "
-            "Pass --target to re-wire afterward."
-        ),
-    )
-    parser.add_argument(
-        "--scan-only",
-        action="store_true",
-        help="With --purge-allowlist, only report findings (implies dry-run).",
+        help="With --uninstall, print planned changes without modifying files.",
     )
     args = parser.parse_args()
 
@@ -565,7 +678,7 @@ def main() -> int:
             return 1
 
     # install.sh runs this file from a temp path with no package context. Install
-    # the zip (when provided) before any ``scripts.*`` imports so uninstall/purge
+    # the zip (when provided) before any ``scripts.*`` imports so uninstall
     # and wire can resolve the installed tree.
     script_dir = Path(__file__).parent.parent.parent.resolve()
     is_running_from_install_dir = script_dir == install_dir
@@ -600,21 +713,6 @@ def main() -> int:
             print("\n".join(plan.messages) if plan.messages else "No managed plugin interventions found.")
             return 0
 
-        if args.purge_allowlist:
-            from scripts.installer.purge_markdown_allowlist import (  # noqa: PLC0415
-                purge_markdown_allowlist_artifacts,
-                scan_markdown_allowlist_artifacts,
-            )
-
-            dry = args.dry_run or args.scan_only
-            if args.scan_only:
-                report = scan_markdown_allowlist_artifacts(dest=dest_path)
-            else:
-                report = purge_markdown_allowlist_artifacts(dest=dest_path, dry_run=dry)
-            print("\n".join(report.messages) if report.messages else "No markdown-allowlist artifacts found.")
-            if args.scan_only or dry or not args.target:
-                return 0
-
         if not installed_runtime:
             if args.target and install_dir.exists() and is_running_from_install_dir:
                 pass  # wire-only from already-installed tree
@@ -630,7 +728,32 @@ def main() -> int:
             if not (install_dir / "scripts").is_dir():
                 print(f"error: runtime scripts missing under {install_dir}", file=sys.stderr)
                 return 1
-            return wire(install_dir, args.target, dest_path)
+            result = wire(install_dir, args.target, dest_path)
+            if result != 0:
+                return result
+
+        if args.tracker or args.scm or args.integration_config:
+            if args.integration_config is not None:
+                config_path = configure_integrations(
+                    dest_path,
+                    tracker=args.tracker or "linear",
+                    scm=args.scm or "github",
+                    branch_template=args.branch_template,
+                    tracker_scope=args.tracker_scope,
+                    config_source=args.integration_config,
+                )
+            elif not args.tracker or not args.scm:
+                print("error: --tracker and --scm are required when --integration-config is not supplied", file=sys.stderr)
+                return 1
+            else:
+                config_path = configure_integrations(
+                    dest_path,
+                    tracker=args.tracker,
+                    scm=args.scm,
+                    branch_template=args.branch_template,
+                    tracker_scope=args.tracker_scope,
+                )
+            print(f"Integration configuration written to {config_path}")
 
         print("\n" + "=" * 70)
         print("                  INSTALLATION COMPLETED SUCCESSFULLY                  ")
