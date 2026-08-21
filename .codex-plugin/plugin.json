@@ -1,6 +1,6 @@
 {
   "name": "codex-workflows-plugin",
-  "version": "0.5.20",
+  "version": "0.5.21",
   "description": "Provider-neutral workflow orchestration with adapter-backed tracker and SCM integrations",
   "author": {
     "name": "agentrick"
