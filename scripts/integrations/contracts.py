@@ -42,6 +42,8 @@ class ArtifactRef:
     revision: str
     url: str | None = None
     provider_data: dict[str, Any] = field(default_factory=dict)
+    outcome: str | None = None
+    attempts: int | None = None
 
 
 @dataclass(frozen=True)

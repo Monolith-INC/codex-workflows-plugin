@@ -8,7 +8,6 @@ from .adapters import scm_adapter, tracker_adapter
 from .config import load_config
 from .contracts import IntegrationError
 
-
 TOOLS = [
     {"name": "tracker_get_work_item", "description": "Retrieve one configured tracker work item.", "inputSchema": {"type": "object", "required": ["ref"], "properties": {"ref": {"type": "string"}}}},
     {"name": "tracker_search_work_items", "description": "Search configured tracker work items.", "inputSchema": {"type": "object", "required": ["query"], "properties": {"query": {"type": "string"}, "cursor": {"type": "string"}}}},
@@ -31,22 +30,50 @@ def handle_call(name: str, args: dict[str, Any], *, project_root: Path | None = 
     if name.startswith("tracker_"):
         tracker = tracker_adapter(config.tracker)
         match name:
-            case "tracker_get_work_item": return tracker.get_work_item(args["ref"]).__dict__
-            case "tracker_search_work_items": return tracker.search_work_items(args["query"], args.get("cursor"))
-            case "tracker_create_work_item": return tracker.create_work_item(args["kind"], args["title"], args.get("description", ""), args.get("parentRef")).__dict__
-            case "tracker_list_children": return [item.__dict__ for item in tracker.list_children(args["ref"])]
-            case "tracker_transition_work_item": return tracker.transition_work_item(args["ref"], args["state"]).__dict__
-            case "tracker_publish_artifact": return tracker.publish_artifact(args["ref"], args["kind"], args["title"], args["content"], args["revision"]).__dict__
-            case "tracker_list_artifacts": return [item.__dict__ for item in tracker.list_artifacts(args["ref"], args.get("kind"))]
-            case "tracker_link_development_artifact": return tracker.link_development_artifact(args["ref"], args["url"], args.get("type", "pull_request"))
+            case "tracker_get_work_item":
+                return _serialize(tracker.get_work_item(args["ref"]))
+            case "tracker_search_work_items":
+                return tracker.search_work_items(args["query"], args.get("cursor"))
+            case "tracker_create_work_item":
+                return _serialize(tracker.create_work_item(args["kind"], args["title"], args.get("description", ""), args.get("parentRef")))
+            case "tracker_list_children":
+                return [_serialize(item) for item in tracker.list_children(args["ref"])]
+            case "tracker_transition_work_item":
+                return _serialize(tracker.transition_work_item(args["ref"], args["state"]))
+            case "tracker_publish_artifact":
+                artifact = tracker.publish_artifact(args["ref"], args["kind"], args["title"], args["content"], args["revision"])
+                payload = _serialize(artifact)
+                outcome = artifact.outcome or "created"
+                attempts = artifact.attempts if artifact.attempts is not None else 1
+                payload["outcome"] = outcome
+                payload["attempts"] = attempts
+                _emit_telemetry(
+                    {
+                        "operation": "tracker_publish_artifact",
+                        "adapter": config.tracker.get("adapter"),
+                        "attempts": attempts,
+                        "outcome": outcome,
+                        "error_code": None,
+                    }
+                )
+                return payload
+            case "tracker_list_artifacts":
+                return [_serialize(item) for item in tracker.list_artifacts(args["ref"], args.get("kind"))]
+            case "tracker_link_development_artifact":
+                return tracker.link_development_artifact(args["ref"], args["url"], args.get("type", "pull_request"))
     if name.startswith("scm_"):
         scm = scm_adapter(config.scm)
         match name:
-            case "scm_get_pull_request": return scm.get_pull_request(args["ref"]).__dict__
-            case "scm_create_pull_request": return scm.create_pull_request(args["title"], args.get("description", ""), args["sourceBranch"], args["targetBranch"]).__dict__
-            case "scm_list_review_threads": return [item.__dict__ for item in scm.list_review_threads(args["ref"])]
-            case "scm_reply_to_thread": return scm.reply_to_thread(args["pullRequestRef"], args["threadRef"], args["content"])
-            case "scm_link_work_item": return scm.link_work_item(args["pullRequestRef"], args["workItemRef"])
+            case "scm_get_pull_request":
+                return _serialize(scm.get_pull_request(args["ref"]))
+            case "scm_create_pull_request":
+                return _serialize(scm.create_pull_request(args["title"], args.get("description", ""), args["sourceBranch"], args["targetBranch"]))
+            case "scm_list_review_threads":
+                return [_serialize(item) for item in scm.list_review_threads(args["ref"])]
+            case "scm_reply_to_thread":
+                return scm.reply_to_thread(args["pullRequestRef"], args["threadRef"], args["content"])
+            case "scm_link_work_item":
+                return scm.link_work_item(args["pullRequestRef"], args["workItemRef"])
     raise IntegrationError("unsupported_capability", f"Unknown integration operation: {name}")
 
 
@@ -70,6 +97,15 @@ def process_message(line: str, *, project_root: Path | None = None) -> str:
                 result = handle_call(str(params.get("name")), params.get("arguments") or {}, project_root=project_root)
                 response["result"] = {"content": [{"type": "text", "text": json.dumps(result, default=_json_default)}]}
             except IntegrationError as exc:
+                _emit_telemetry(
+                    {
+                        "operation": str((message.get("params") or {}).get("name")),
+                        "adapter": None,
+                        "attempts": 1,
+                        "outcome": "error",
+                        "error_code": exc.code,
+                    }
+                )
                 response["result"] = {"isError": True, "content": [{"type": "text", "text": json.dumps(exc.to_dict())}]}
         elif method == "notifications/initialized":
             return ""
@@ -78,6 +114,23 @@ def process_message(line: str, *, project_root: Path | None = None) -> str:
     except Exception as exc:
         response["error"] = {"code": -32603, "message": str(exc)}
     return json.dumps(response)
+
+
+def _serialize(value: Any) -> Any:
+    if hasattr(value, "__dict__"):
+        payload = dict(value.__dict__)
+        for key, item in list(payload.items()):
+            if hasattr(item, "value"):
+                payload[key] = item.value
+        return payload
+    return value
+
+
+def _emit_telemetry(payload: dict[str, Any]) -> None:
+    import sys
+
+    sys.stderr.write(json.dumps({"telemetry": payload}) + "\n")
+    sys.stderr.flush()
 
 
 def _json_default(value: Any) -> Any:

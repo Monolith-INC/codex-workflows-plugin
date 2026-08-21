@@ -20,9 +20,9 @@ import shutil
 import subprocess
 import sys
 import zipfile
+from collections.abc import Iterator
 from contextlib import contextmanager, nullcontext
 from pathlib import Path
-from typing import Iterator
 
 _MANAGED_HOOK_MARKERS = ("codex-workflows-plugin", "codex_workflows", "workflow-integrations")
 
@@ -162,8 +162,16 @@ def configure_integrations(
     branch_template: str,
     tracker_scope: str = "auto",
     config_source: Path | None = None,
+    discover: bool = True,
+    confirm_mappings: dict | None = None,
 ) -> Path:
     """Write provider-neutral setup while keeping provider details adapter-owned."""
+    from scripts.integrations.discovery import (
+        apply_discovery_to_config,
+        discover_provider_capabilities,
+        mapping_presets,
+    )
+
     if config_source is not None:
         payload = json.loads(config_source.read_text(encoding="utf-8"))
         if not isinstance(payload, dict):
@@ -185,6 +193,55 @@ def configure_integrations(
             "tracker": tracker_config,
             "scm": _default_scm_config(scm, project_dest),
         }
+
+    tracker_cfg = payload["tracker"]
+    scm_cfg = payload["scm"]
+    tracker_discovery = None
+    scm_discovery = None
+    if discover:
+        try:
+            tracker_discovery = discover_provider_capabilities(
+                kind="tracker",
+                adapter=str(tracker_cfg.get("adapter")),
+                connection=tracker_cfg.get("connection") or {},
+                preferred_bindings=tracker_cfg.get("bindings") or {},
+            )
+        except Exception:
+            tracker_discovery = discover_provider_capabilities(
+                kind="tracker",
+                adapter=str(tracker_cfg.get("adapter")),
+                connection=tracker_cfg.get("connection") or {},
+                preferred_bindings=tracker_cfg.get("bindings") or {},
+                discovered_tools=list((tracker_cfg.get("bindings") or {}).values()),
+            )
+        try:
+            scm_discovery = discover_provider_capabilities(
+                kind="scm",
+                adapter=str(scm_cfg.get("adapter")),
+                connection=scm_cfg.get("connection") or {},
+                preferred_bindings=scm_cfg.get("bindings") or {},
+            )
+        except Exception:
+            scm_discovery = discover_provider_capabilities(
+                kind="scm",
+                adapter=str(scm_cfg.get("adapter")),
+                connection=scm_cfg.get("connection") or {},
+                preferred_bindings=scm_cfg.get("bindings") or {},
+                discovered_tools=list((scm_cfg.get("bindings") or {}).values()) or ["gh"],
+            )
+        payload = apply_discovery_to_config(payload, tracker_discovery=tracker_discovery, scm_discovery=scm_discovery)
+    else:
+        presets = mapping_presets(str(tracker_cfg.get("adapter")))
+        tracker_cfg = dict(tracker_cfg)
+        if not (tracker_cfg.get("mappings") or {}).get("kinds"):
+            tracker_cfg["mappings"] = presets
+        payload["tracker"] = tracker_cfg
+
+    if confirm_mappings is not None:
+        tracker_cfg = dict(payload["tracker"])
+        tracker_cfg["mappings"] = confirm_mappings
+        payload["tracker"] = tracker_cfg
+
     path = project_dest / ".codex-workflows" / "integrations.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -192,12 +249,15 @@ def configure_integrations(
 
 
 def _default_tracker_config(provider: str, scope: str) -> dict:
+    from scripts.integrations.discovery import mapping_presets
+
+    presets = mapping_presets(provider)
     if provider == "linear":
         return {
             "adapter": "linear",
             "scope": scope,
             "connection": {"command": "npx", "args": ["-y", "mcp-remote", "https://mcp.linear.app/mcp"]},
-            "mappings": {"kinds": {}, "states": {}},
+            "mappings": presets,
             "bindings": {
                 "get_work_item": "get_issue",
                 "search_work_items": "list_issues",
@@ -217,7 +277,7 @@ def _default_tracker_config(provider: str, scope: str) -> dict:
                 "command": "npx",
                 "args": ["-y", "@azure-devops/mcp", "${AZURE_DEVOPS_ORG}", "-d", "core", "work-items", "repositories"],
             },
-            "mappings": {"kinds": {}, "states": {}},
+            "mappings": presets,
             "bindings": {
                 "get_work_item": "wit_get_work_item",
                 "search_work_items": "wit_query_by_wiql",
@@ -237,8 +297,12 @@ def _default_scm_config(provider: str, project_dest: Path) -> dict:
         owner, repo = _github_remote(project_dest)
         return {"adapter": "github", "owner": owner, "repo": repo, "connection": {"command": "gh", "args": []}, "bindings": {}}
     if provider == "azure_repos":
+        org, project, repo = _azure_remote(project_dest)
         return {
             "adapter": "azure_repos",
+            "organization": org,
+            "project": project,
+            "repository": repo,
             "connection": {"command": "npx", "args": ["-y", "@azure-devops/mcp", "${AZURE_DEVOPS_ORG}", "-d", "core", "repositories", "work-items"]},
             "bindings": {
                 "get_pull_request": "repo_get_pull_request_by_id",
@@ -262,6 +326,27 @@ def _github_remote(project_dest: Path) -> tuple[str, str]:
     tail = value.split("github.com", 1)[-1].lstrip(":/")
     parts = tail.split("/")
     return (parts[-2], parts[-1]) if len(parts) >= 2 else ("", parts[-1] if parts else "")
+
+
+def _azure_remote(project_dest: Path) -> tuple[str, str, str]:
+    try:
+        remote = subprocess.run(["git", "-C", str(project_dest), "remote", "get-url", "origin"], capture_output=True, text=True, check=True).stdout.strip()
+    except (OSError, subprocess.CalledProcessError):
+        return "", "", ""
+    value = remote.removesuffix(".git")
+    if "dev.azure.com" in value:
+        tail = value.split("dev.azure.com", 1)[-1].lstrip(":/")
+        parts = [part for part in tail.split("/") if part and part != "_git"]
+        if len(parts) >= 3:
+            return parts[0], parts[1], parts[2]
+    if "visualstudio.com" in value:
+        host = value.split("://", 1)[-1]
+        org = host.split(".visualstudio.com", 1)[0]
+        tail = value.split(".visualstudio.com", 1)[-1].lstrip(":/")
+        parts = [part for part in tail.split("/") if part and part != "_git"]
+        if len(parts) >= 2:
+            return org, parts[0], parts[1]
+    return "", "", value.rsplit("/", 1)[-1]
 
 
 def _write_cursor_mcp_config(project_dest: Path, servers: dict) -> None:
@@ -480,13 +565,13 @@ def _install_import_path(install_dir: Path) -> Iterator[None]:
 def wire(install_dir: Path, target: str, project_dest: str | Path) -> int:
     """Wire hooks and discovery assets into a project. Global install is not supported."""
     with _install_import_path(install_dir):
-        from scripts.installer.cli import install  # noqa: PLC0415
-        from scripts.installer.cursor_hooks import (  # noqa: PLC0415
+        from scripts.installer.cli import install
+        from scripts.installer.cursor_hooks import (
             desired_cursor_hooks,
             merge_cursor_hooks,
             strip_managed_cursor_hooks,
         )
-        from scripts.installer.targets import Target  # noqa: PLC0415
+        from scripts.installer.targets import Target
 
         dest_path = Path(project_dest).expanduser().resolve()
         client_names = {
@@ -636,6 +721,11 @@ def main() -> int:
     parser.add_argument("--branch-template", default="{category}/{key}-{slug}", help="Branch format containing {key}.")
     parser.add_argument("--integration-config", type=Path, help="Validated integration JSON to install.")
     parser.add_argument(
+        "--skip-discovery",
+        action="store_true",
+        help="Skip live provider tools/list discovery; still apply mapping presets.",
+    )
+    parser.add_argument(
         "--dest",
         help="Required project root for local install, wire, and uninstall.",
     )
@@ -702,7 +792,7 @@ def main() -> int:
 
     with import_path_cm:
         if args.uninstall:
-            from scripts.installer.uninstall import uninstall  # noqa: PLC0415
+            from scripts.installer.uninstall import uninstall
 
             plan = uninstall(
                 install_dir,
@@ -741,6 +831,7 @@ def main() -> int:
                     branch_template=args.branch_template,
                     tracker_scope=args.tracker_scope,
                     config_source=args.integration_config,
+                    discover=not args.skip_discovery,
                 )
             elif not args.tracker or not args.scm:
                 print("error: --tracker and --scm are required when --integration-config is not supplied", file=sys.stderr)
@@ -752,6 +843,7 @@ def main() -> int:
                     scm=args.scm,
                     branch_template=args.branch_template,
                     tracker_scope=args.tracker_scope,
+                    discover=not args.skip_discovery,
                 )
             print(f"Integration configuration written to {config_path}")
 

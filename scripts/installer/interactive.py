@@ -231,7 +231,7 @@ def collect_answers(io: WizardIO, *, cwd: Path | None = None) -> WizardAnswers:
         keep_runtime = _ask_yes_no(io, "Keep the runtime directory (.codex-workflows)?", default=False)
         _print(io, "")
         _print(io, "Summary")
-        _print(io, f"  Action : uninstall")
+        _print(io, "  Action : uninstall")
         _print(io, f"  Dest   : {dest}")
         _print(io, f"  Keep runtime: {'yes' if keep_runtime else 'no'}")
         if not _ask_yes_no(io, "Proceed?", default=True):
@@ -252,9 +252,21 @@ def collect_answers(io: WizardIO, *, cwd: Path | None = None) -> WizardAnswers:
     if branch_template == "other":
         branch_template = _ask(io, "Custom branch template (must contain {key})", default="{category}/{key}-{slug}")
 
+    from scripts.integrations.discovery import mapping_presets
+
+    presets = mapping_presets(tracker)
+    _print(io, "")
+    _print(io, "Proposed logical mappings (kinds / states):")
+    for key, value in (presets.get("kinds") or {}).items():
+        _print(io, f"  kind {key} -> {value}")
+    for key, value in (presets.get("states") or {}).items():
+        _print(io, f"  state {key} -> {value}")
+    if not _ask_yes_no(io, "Confirm these kind/state mappings?", default=True):
+        raise SystemExit("Cancelled. Re-run bootstrap after adjusting provider mappings.")
+
     _print(io, "")
     _print(io, "Summary")
-    _print(io, f"  Action : install")
+    _print(io, "  Action : install")
     _print(io, f"  Dest   : {dest}")
     _print(io, f"  Target : {target}")
     _print(io, f"  Tracker: {tracker} ({tracker_scope or 'auto'})")
@@ -357,6 +369,43 @@ def verify_install(dest: Path, target: str) -> list[CheckResult]:
         remediable=True,
         remedy_key="rewire",
     )
+
+    if integration_config.is_file():
+        try:
+            from scripts.integrations.discovery import verify_integration_capabilities
+            from scripts.integrations.config import load_config
+
+            config = load_config(dest)
+            payload = {
+                "tracker": config.tracker,
+                "scm": config.scm,
+                "branchTemplate": config.branch_template,
+                "schemaVersion": 1,
+            }
+            problems = verify_integration_capabilities(payload, probe=False)
+            add(
+                "integration-mappings",
+                not problems,
+                "bindings and mappings look complete" if not problems else "; ".join(problems[:3]),
+                remediable=True,
+                remedy_key="rewire",
+            )
+            if config.scm.get("adapter") == "github":
+                gh_ok = shutil.which("gh") is not None
+                add(
+                    "github-cli",
+                    gh_ok,
+                    "gh CLI available" if gh_ok else "gh CLI missing for GitHub SCM",
+                    remediable=False,
+                )
+        except Exception as exc:
+            add(
+                "integration-mappings",
+                False,
+                f"could not validate integration config: {exc}",
+                remediable=True,
+                remedy_key="rewire",
+            )
 
     hook_script = runtime / "skills" / "codex_workflows" / "scripts" / "claude_enforce_hook.py"
     add(

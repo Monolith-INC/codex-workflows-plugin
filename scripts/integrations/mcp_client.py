@@ -22,7 +22,38 @@ class StdioMcpClient:
         self.args = list(args)
         self.timeout = timeout
 
+    def list_tools(self) -> list[dict[str, Any]]:
+        """Negotiate initialize and return provider tool descriptors from tools/list."""
+        response = self._roundtrip(
+            {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
+            expected_id=2,
+        )
+        if "error" in response:
+            raise IntegrationError("provider_error", str(response["error"]))
+        tools = (response.get("result") or {}).get("tools")
+        if not isinstance(tools, list):
+            return []
+        return [tool for tool in tools if isinstance(tool, dict)]
+
     def call(self, tool: str, arguments: dict[str, Any]) -> Any:
+        response = self._roundtrip(
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "tools/call",
+                "params": {"name": tool, "arguments": arguments},
+            },
+            expected_id=2,
+        )
+        if "error" in response:
+            error = response["error"]
+            raise IntegrationError("provider_error", str(error))
+        result = response.get("result") or {}
+        if result.get("isError"):
+            raise IntegrationError("provider_error", _content_text(result.get("content")))
+        return _decode_content(result.get("content"), result)
+
+    def _roundtrip(self, request: dict[str, Any], *, expected_id: int) -> dict[str, Any]:
         try:
             process = subprocess.Popen(
                 [self.command, *self.args],
@@ -39,28 +70,13 @@ class StdioMcpClient:
             self._send(process, {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})
             self._read_response(process, 1)
             self._send(process, {"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}})
-            self._send(
-                process,
-                {
-                    "jsonrpc": "2.0",
-                    "id": 2,
-                    "method": "tools/call",
-                    "params": {"name": tool, "arguments": arguments},
-                },
-            )
-            response = self._read_response(process, 2)
+            self._send(process, request)
+            return self._read_response(process, expected_id)
         finally:
             try:
                 process.kill()
             except OSError:
                 pass
-        if "error" in response:
-            error = response["error"]
-            raise IntegrationError("provider_error", str(error))
-        result = response.get("result") or {}
-        if result.get("isError"):
-            raise IntegrationError("provider_error", _content_text(result.get("content")))
-        return _decode_content(result.get("content"), result)
 
     def _send(self, process: subprocess.Popen[str], payload: dict[str, Any]) -> None:
         if process.stdin is None:

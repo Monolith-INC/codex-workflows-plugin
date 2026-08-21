@@ -10,8 +10,9 @@ for _path in (_REPO_ROOT, _SCRIPTS_DIR):
     if _path not in sys.path:
         sys.path.insert(0, _path)
 
-from scripts.integrations.gateway import process_message  # noqa: E402
 from pathlib import Path
+
+from scripts.integrations.gateway import process_message
 
 
 def main() -> None:

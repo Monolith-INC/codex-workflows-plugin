@@ -85,14 +85,44 @@ class LinearTrackerAdapter(TrackerAdapter):
     def transition_work_item(self, ref: str, state: str) -> WorkItem:
         return _work_item(self._call("transition_work_item", {"id": ref, "state": self._provider_state(state)}), self.mappings)
 
-    def publish_artifact(self, ref: str, kind: str, title: str, content: str, revision: str) -> ArtifactRef:
-        for existing in self.list_artifacts(ref, kind):
-            if existing.revision == revision and existing.title == title:
-                return existing
-        return _artifact(self._call("publish_artifact", {"issueId": ref, "kind": kind, "title": title, "content": content, "revision": revision}))
-
     def list_artifacts(self, ref: str, kind: str | None = None) -> list[ArtifactRef]:
         return [_artifact(item) for item in _items(self._call("list_artifacts", {"issueId": ref, "kind": kind}))]
+
+    def list_children(self, ref: str) -> list[WorkItem]:
+        result = self._call("list_children", {"parentId": ref, "parent": ref})
+        items = [item for item in _items(result) if isinstance(item, dict)]
+        selected = [
+            item
+            for item in items
+            if str(item.get("parentId") or item.get("parent_id") or "") == ref
+        ]
+        return [_work_item(item, self.mappings) for item in (selected or items)]
+
+    def publish_artifact(self, ref: str, kind: str, title: str, content: str, revision: str) -> ArtifactRef:
+        from .publish import publish_artifact_idempotent
+
+        result = publish_artifact_idempotent(
+            list_fn=lambda: self.list_artifacts(ref, kind),
+            create_fn=lambda: _artifact(
+                self._call(
+                    "publish_artifact",
+                    {"issueId": ref, "kind": kind, "title": title, "content": content, "revision": revision},
+                )
+            ),
+            title=title,
+            revision=revision,
+        )
+        artifact = result["artifact"]
+        return ArtifactRef(
+            artifact.id,
+            artifact.kind,
+            artifact.title,
+            artifact.revision,
+            artifact.url,
+            dict(artifact.provider_data),
+            result["outcome"],
+            result["attempts"],
+        )
 
     def _provider_state(self, state: str) -> str:
         return str(self.mappings.get("states", {}).get(state, state))
@@ -114,14 +144,52 @@ class AzureDevOpsTrackerAdapter(TrackerAdapter):
     def transition_work_item(self, ref: str, state: str) -> WorkItem:
         return _work_item(self._call("transition_work_item", {"id": ref, "state": self._provider_state(state)}), self.mappings)
 
-    def publish_artifact(self, ref: str, kind: str, title: str, content: str, revision: str) -> ArtifactRef:
-        for existing in self.list_artifacts(ref, kind):
-            if existing.revision == revision and existing.title == title:
-                return existing
-        return _artifact(self._call("publish_artifact", {"id": int(ref) if str(ref).isdigit() else ref, "kind": kind, "title": title, "content": content, "revision": revision}))
-
     def list_artifacts(self, ref: str, kind: str | None = None) -> list[ArtifactRef]:
         return [_artifact(item) for item in _items(self._call("list_artifacts", {"id": ref, "kind": kind}))]
+
+    def list_children(self, ref: str) -> list[WorkItem]:
+        parent_id = int(ref) if str(ref).isdigit() else ref
+        result = self._call(
+            "list_children",
+            {
+                "ids": [parent_id],
+                "parentId": parent_id,
+                "query": f"SELECT [System.Id] FROM WorkItems WHERE [System.Parent] = {parent_id}",
+            },
+        )
+        return [_work_item(item, self.mappings) for item in _items(result)]
+
+    def publish_artifact(self, ref: str, kind: str, title: str, content: str, revision: str) -> ArtifactRef:
+        from .publish import publish_artifact_idempotent
+
+        result = publish_artifact_idempotent(
+            list_fn=lambda: self.list_artifacts(ref, kind),
+            create_fn=lambda: _artifact(
+                self._call(
+                    "publish_artifact",
+                    {
+                        "id": int(ref) if str(ref).isdigit() else ref,
+                        "kind": kind,
+                        "title": title,
+                        "content": content,
+                        "revision": revision,
+                    },
+                )
+            ),
+            title=title,
+            revision=revision,
+        )
+        artifact = result["artifact"]
+        return ArtifactRef(
+            artifact.id,
+            artifact.kind,
+            artifact.title,
+            artifact.revision,
+            artifact.url,
+            dict(artifact.provider_data),
+            result["outcome"],
+            result["attempts"],
+        )
 
     def _provider_state(self, state: str) -> str:
         return str(self.mappings.get("states", {}).get(state, state))
@@ -206,7 +274,74 @@ class GitHubScmAdapter(ScmAdapter):
 
 
 class AzureReposScmAdapter(ScmAdapter):
-    pass
+    """Azure Repos transport through the configured MCP bindings."""
+
+    def get_pull_request(self, ref: str) -> PullRequest:
+        return _pull_request(
+            self._call(
+                "get_pull_request",
+                {
+                    "id": int(ref) if str(ref).isdigit() else ref,
+                    "repositoryId": self.config.get("repository"),
+                    "project": self.config.get("project"),
+                },
+            )
+        )
+
+    def create_pull_request(self, title: str, description: str, source_branch: str, target_branch: str) -> PullRequest:
+        return _pull_request(
+            self._call(
+                "create_pull_request",
+                {
+                    "title": title,
+                    "description": description,
+                    "source": source_branch,
+                    "target": target_branch,
+                    "sourceRefName": f"refs/heads/{source_branch}",
+                    "targetRefName": f"refs/heads/{target_branch}",
+                    "repositoryId": self.config.get("repository"),
+                    "project": self.config.get("project"),
+                },
+            )
+        )
+
+    def list_review_threads(self, ref: str) -> list[ReviewThread]:
+        value = self._call(
+            "list_review_threads",
+            {
+                "id": int(ref) if str(ref).isdigit() else ref,
+                "pullRequestId": int(ref) if str(ref).isdigit() else ref,
+                "repositoryId": self.config.get("repository"),
+                "project": self.config.get("project"),
+            },
+        )
+        return [_review_thread(item) for item in _items(value)]
+
+    def reply_to_thread(self, pr_ref: str, thread_ref: str, content: str) -> dict[str, Any]:
+        return self._call(
+            "reply_to_thread",
+            {
+                "pull_request": pr_ref,
+                "thread": thread_ref,
+                "content": content,
+                "pullRequestId": int(pr_ref) if str(pr_ref).isdigit() else pr_ref,
+                "repositoryId": self.config.get("repository"),
+                "project": self.config.get("project"),
+            },
+        )
+
+    def link_work_item(self, pr_ref: str, work_item_ref: str) -> dict[str, Any]:
+        return self._call(
+            "link_work_item",
+            {
+                "pull_request": pr_ref,
+                "work_item": work_item_ref,
+                "pullRequestId": int(pr_ref) if str(pr_ref).isdigit() else pr_ref,
+                "workItemId": int(work_item_ref) if str(work_item_ref).isdigit() else work_item_ref,
+                "repositoryId": self.config.get("repository"),
+                "project": self.config.get("project"),
+            },
+        )
 
 
 def tracker_adapter(config: dict[str, Any]) -> TrackerAdapter:
@@ -270,7 +405,16 @@ def _artifact(value: Any) -> ArtifactRef:
 def _pull_request(value: Any) -> PullRequest:
     if not isinstance(value, dict):
         raise IntegrationError("provider_error", "Provider returned an invalid pull-request payload.")
-    return PullRequest(str(value.get("id") or value.get("number") or ""), str(value.get("number") or value.get("id") or ""), str(value.get("title") or ""), str(value.get("url") or ""), str(value.get("source") or value.get("sourceBranch") or ""), str(value.get("target") or value.get("targetBranch") or ""), str(value.get("state") or ""), value)
+    return PullRequest(
+        str(value.get("id") or value.get("number") or ""),
+        str(value.get("number") or value.get("id") or ""),
+        str(value.get("title") or ""),
+        str(value.get("url") or ""),
+        str(value.get("source") or value.get("sourceBranch") or value.get("headRefName") or ""),
+        str(value.get("target") or value.get("targetBranch") or value.get("baseRefName") or ""),
+        str(value.get("state") or ""),
+        value,
+    )
 
 
 def _review_thread(value: Any) -> ReviewThread:

@@ -5,7 +5,6 @@ from pathlib import Path
 
 from scripts.integrations.adapters import tracker_adapter
 from scripts.integrations.config import load_config
-from scripts.integrations.contracts import LogicalState, WorkItemKind
 from scripts.integrations.gateway import process_message
 
 
@@ -38,6 +37,7 @@ class IntegrationContractTests(unittest.TestCase):
         names = {tool["name"] for tool in response["result"]["tools"]}
         self.assertIn("tracker_create_work_item", names)
         self.assertIn("tracker_publish_artifact", names)
+        self.assertIn("tracker_list_children", names)
         self.assertIn("scm_create_pull_request", names)
         self.assertIn("scm_list_review_threads", names)
 
