@@ -4,7 +4,6 @@ from collections.abc import Callable
 
 from .state import Event, QueueState, Task, TaskState
 
-
 Reducer = Callable[[QueueState, Event, int], QueueState]
 
 

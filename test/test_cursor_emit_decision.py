@@ -15,7 +15,7 @@ for path in (ROOT, SCRIPTS_DIR):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
 
-from scripts import hook_runtime  # noqa: E402
+from scripts import hook_runtime
 
 
 class TestCursorEmitDecision(unittest.TestCase):

@@ -4,7 +4,6 @@ from typing import Any
 from .contracts import OUTPUT_PROPERTY, check_value
 from .manifests import CapabilityManifest
 
-
 SemanticEvaluator = Callable[[dict[str, Any], Mapping[str, Any]], list[str]]
 
 

@@ -7,7 +7,7 @@
     "properties": {
       "feature_id": {
         "type": "string",
-        "description": "Feature identifier (GitHub issue, vault path, or name)."
+        "description": "Feature work-item identifier or name."
       },
       "feature_branch": {
         "type": "string",

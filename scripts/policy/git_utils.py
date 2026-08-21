@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import subprocess
-from typing import Any
 
 
 def _run_git_cmd(args: list[str], cwd: str, timeout: float | None = None) -> str:
@@ -76,7 +75,7 @@ def get_commits_behind_base(workspace_root: str, base_branch: str) -> list[str]:
 
 
 def get_unmerged_commits_intersection(workspace_root: str, base_branch: str) -> dict[str, list[str]]:
-    """Finds if the current HEAD contains unmerged commits from other local feature/bugfix branches.
+    """Find if the current HEAD contains unmerged commits from other local work branches.
 
     Returns:
         A dictionary mapping other_branch -> list of overlapping unmerged commit hashes.
@@ -91,14 +90,14 @@ def get_unmerged_commits_intersection(workspace_root: str, base_branch: str) -> 
     if not head_unmerged:
         return {}
 
-    # Get list of all local branches starting with feature/, bugfix/, techdebt/
+    # Inspect all local work branches; naming is configured during bootstrap.
     all_refs = _run_git_cmd(["git", "for-each-ref", "--format=%(refname:short)", "refs/heads/"], workspace_root)
     other_branches = []
     for line in all_refs.splitlines():
         branch = line.strip()
         if not branch or branch == current_branch:
             continue
-        if any(branch.startswith(prefix) for prefix in ["feature/", "bugfix/", "techdebt/"]):
+        if branch not in {"main", "master", "develop", "unstable"}:
             other_branches.append(branch)
 
     intersection_map = {}

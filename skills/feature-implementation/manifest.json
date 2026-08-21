@@ -7,7 +7,7 @@
     "properties": {
       "feature_id": {
         "type": "string",
-        "description": "Feature identifier (Azure DevOps ID, vault path, GitHub issue, or name)."
+        "description": "Feature work-item identifier or name."
       }
     },
     "required": ["feature_id"]

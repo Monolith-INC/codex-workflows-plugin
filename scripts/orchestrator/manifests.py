@@ -8,16 +8,15 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from .exhaustive import assert_never
-from .failures import SkillAssetMissing
 from .contracts import (
     Parsed,
     Rejected,
     ValueContract,
     parse_value_contract,
 )
+from .exhaustive import assert_never
+from .failures import SkillAssetMissing
 from .state import FrozenDict, deep_freeze
-
 
 logger = logging.getLogger(__name__)
 

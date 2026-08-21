@@ -5,7 +5,11 @@ import unittest
 from pathlib import Path
 
 from scripts.orchestrator.engine import OrchestratorEngine
-from scripts.orchestrator.mcp_server import default_skills_dir, process_message, resolve_skills_dir
+from scripts.orchestrator.mcp_server import (
+    default_skills_dir,
+    process_message,
+    resolve_skills_dir,
+)
 
 
 class TestMCPServer(unittest.TestCase):

@@ -1,224 +1,166 @@
 from __future__ import annotations
 
-import os
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 from artifact_profiles.resolution import resolution_profile
 from artifact_profiles.spec import spec_profile
-from artifact_reflection import ArtifactContext, ReflectionEngine, ReflectionState, load_mistakes
+from artifact_reflection import ArtifactContext, ReflectionEngine, ReflectionState
 from resolution_runtime import load_resolution_template, plan_resolution
-from policy.engine import validate_ticket_start
-from policy.events import CanonicalToolEvent
 from resolve_ticket_hook import on_resolve_ticket
 from spec_runtime import load_template, plan_spec_generation, slug_ticket_id
 from spec_start_hook import on_start_ticket
 
-from .failures import PolicyDenied
 from .invocation import HandlerResult, Invocation
-
-
-def _project_root() -> Path | None:
-    for key in ("CODEX_PROJECT_ROOT", "CURSOR_PROJECT_DIR", "CLAUDE_PROJECT_DIR"):
-        value = os.environ.get(key, "").strip()
-        if value:
-            return Path(value)
-    return None
 
 
 def _skills_dir() -> Path:
     return Path(__file__).resolve().parent.parent.parent / "skills"
 
 
+def _source(arguments: Any) -> str:
+    for key in ("source_text", "description", "work_item_description", "requirements"):
+        value = arguments.get(key, "")
+        if value:
+            return str(value)
+    return ""
+
+
+def _reflection(arguments: Any, invocation: Invocation, *, skill: str, kind: str, ticket_id: str, draft: str, ground_truth: dict[str, Any]) -> tuple[ReflectionState, Any]:
+    state = ReflectionState(attempt=invocation.attempt)
+    history = arguments.get("critic_history", arguments.get("reflection_history", []))
+    if not isinstance(history, list):
+        history = []
+    context = ArtifactContext(skill, kind, ticket_id, slug_ticket_id(ticket_id), draft, ground_truth, int(arguments.get("max_attempts", 3)))
+    decision = ReflectionEngine(spec_profile(kind) if skill == "write-spec" else resolution_profile()).run_with_mistakes(context, state=state, mistakes=history)
+    return decision.reflection, decision
+
+
 def handle_write_spec(invocation: Invocation) -> HandlerResult:
     arguments, instructions = invocation.arguments, invocation.instructions
-    ticket_id = arguments["ticket_id"]
-    spec_kind = arguments.get("spec_kind", "tech-spec")
-    vault = os.environ.get("CODEX_VAULT_FOLDER", "AI_Codex")
-    root = _project_root()
-    slug = slug_ticket_id(ticket_id)
-    specs_dir = f"{vault}/Specs/{slug}"
-    mistakes = load_mistakes(vault, root)
-
-    plan = plan_spec_generation(root, vault_folder=vault, ticket_id=ticket_id)
-    template = ""
+    ticket_id = str(arguments["ticket_id"])
+    spec_kind = str(arguments.get("spec_kind", "tech-spec"))
+    plan = plan_spec_generation(ticket_id, source_text=_source(arguments), existing_artifacts=arguments.get("existing_artifacts", []), kind=spec_kind)
     try:
         template = load_template(_skills_dir(), spec_kind)
     except FileNotFoundError:
-        template = f"# {spec_kind}\n\n<!-- Template missing; use write-spec references. -->\n"
-
-    draft = arguments.get("draft_content", "").strip()
-    reflection = ReflectionState(attempt=invocation.attempt)
-    engine = ReflectionEngine(spec_profile(spec_kind))
-    context = ArtifactContext(
-        skill_name="write-spec",
-        artifact_kind=spec_kind,
-        ticket_id=ticket_id,
-        slug=slug,
-        draft=draft,
-        ground_truth=plan.source_hints,
-        max_attempts=int(arguments.get("max_attempts", 3)),
-    )
-    decision = engine.run_with_mistakes(
-        context,
-        vault,
-        root,
-        state=reflection,
-    )
-    critiques = decision.critiques
-    reflection = decision.reflection
-    mode = decision.mode if draft else "instructions"
-
-    return HandlerResult(
-        product={
-            "ticket_id": ticket_id,
-            "spec_kind": spec_kind,
-            "specs_dir": specs_dir,
-            "template": template,
-            "mistakes": mistakes[-10:],
-            "source_hints": plan.source_hints,
-            "critiques": "; ".join(critiques) if critiques else "",
-            "mode": mode,
-            "instructions": instructions,
-        },
-        reflection=reflection.to_dict(),
-    )
+        template = f"# {spec_kind}\n\n<!-- Supply the provider artifact content here. -->\n"
+    draft = str(arguments.get("draft_content", "")).strip()
+    reflection, decision = _reflection(arguments, invocation, skill="write-spec", kind=spec_kind, ticket_id=ticket_id, draft=draft, ground_truth=plan.source_hints)
+    return HandlerResult(product={
+        "ticket_id": ticket_id, "spec_kind": spec_kind, "artifact_scope": "tracker",
+        "required_kinds": list(plan.required_kinds), "missing_kinds": list(plan.missing_kinds),
+        "template": template, "source_hints": plan.source_hints,
+        "critiques": "; ".join(decision.critiques), "mode": decision.mode if draft else "instructions",
+        "instructions": instructions,
+    }, reflection=reflection.to_dict())
 
 
 def handle_start_ticket(invocation: Invocation) -> HandlerResult:
     arguments, instructions = invocation.arguments, invocation.instructions
-    ticket_id = arguments["ticket_id"]
-    vault = os.environ.get("CODEX_VAULT_FOLDER", "AI_Codex")
-    slug = slug_ticket_id(ticket_id)
-    rel_path = f"{vault}/Tickets/Active/{slug}.md"
-    created = False
-
-    root = _project_root()
-    if root is not None:
-        ledger_path = root / rel_path
-        if not ledger_path.exists():
-            decision = validate_ticket_start(
-                CanonicalToolEvent(
-                    client="orchestrator",
-                    tool_name="Write",
-                    file_path=str(ledger_path),
-                    workspace_root=str(root),
-                    vault_dir=str(root / vault),
-                )
-            )
-            if decision.is_denied():
-                raise PolicyDenied(decision.reason or "ticket start blocked by policy")
-        ledger_path.parent.mkdir(parents=True, exist_ok=True)
-        if not ledger_path.exists():
-            ledger_path.write_text(
-                f"---\ntype: ticket\nticket: {ticket_id}\n---\n\n# Ticket {ticket_id}\n",
-                encoding="utf-8",
-            )
-            created = True
-
-    spec_plan = plan_spec_generation(root, vault_folder=vault, ticket_id=ticket_id, ledger_rel=rel_path)
-    write_spec_directive = on_start_ticket(spec_plan)
-
-    return HandlerResult(
-        product={
-            "active_ledger_path": rel_path,
-            "ticket_id": ticket_id,
-            "created": created,
-            "spec_plan": spec_plan.to_dict(),
-            "write_spec_directive": write_spec_directive,
-            "generation_required": spec_plan.generation_required,
-            "mode": "instructions" if write_spec_directive or not created else "completed",
-            "instructions": instructions,
-        }
-    )
+    ticket_id = str(arguments["ticket_id"])
+    plan = plan_spec_generation(ticket_id, source_text=_source(arguments), existing_artifacts=arguments.get("existing_artifacts", []))
+    directive = on_start_ticket(plan)
+    return HandlerResult(product={
+        "ticket_id": ticket_id, "artifact_scope": "tracker", "transition_required": "in_progress",
+        "spec_plan": plan.to_dict(), "write_spec_directive": directive,
+        "generation_required": plan.generation_required,
+        "mode": "instructions" if directive else "completed", "instructions": instructions,
+    })
 
 
 def handle_resolve_ticket(invocation: Invocation) -> HandlerResult:
     arguments, instructions = invocation.arguments, invocation.instructions
-    ticket_id = arguments["ticket_id"]
-    vault = os.environ.get("CODEX_VAULT_FOLDER", "AI_Codex")
-    root = _project_root()
-    slug = slug_ticket_id(ticket_id)
-    ledger_rel = f"{vault}/Tickets/Active/{slug}.md"
-
-    plan = plan_resolution(root, vault_folder=vault, ticket_id=ticket_id, ledger_rel=ledger_rel)
+    ticket_id = str(arguments["ticket_id"])
+    artifacts = arguments.get("artifacts", arguments.get("existing_artifacts", []))
+    plan = plan_resolution(ticket_id, source_text=_source(arguments), artifacts=artifacts, resolution_exists=bool(arguments.get("resolution_exists", False)))
     directive = on_resolve_ticket(plan)
-
-    template = ""
     try:
         template = load_resolution_template(_skills_dir())
     except FileNotFoundError:
-        template = "# Resolution Report\n\n<!-- Template missing. -->\n"
-
+        template = "# Resolution Report\n\n<!-- Supply the provider artifact content here. -->\n"
     ground_truth = plan.ground_truth()
     if arguments.get("implementation_summary"):
         ground_truth["implementation_summary"] = str(arguments["implementation_summary"])
-
-    draft = arguments.get("draft_content", "").strip()
-    reflection = ReflectionState(attempt=invocation.attempt)
-    engine = ReflectionEngine(resolution_profile())
-    context = ArtifactContext(
-        skill_name="resolve-ticket",
-        artifact_kind="resolution-report",
-        ticket_id=ticket_id,
-        slug=slug,
-        draft=draft,
-        ground_truth=ground_truth,
-        max_attempts=int(arguments.get("max_attempts", 3)),
-    )
-    decision = engine.run_with_mistakes(context, vault, root, state=reflection)
-    mistakes = load_mistakes(vault, root, skill_name="resolve-ticket")
-
-    mode = decision.mode if draft else "instructions"
-    if directive and not draft:
-        mode = "instructions"
-
-    return HandlerResult(
-        product={
-            "ticket_id": ticket_id,
-            "active_ledger_path": ledger_rel,
-            "resolution_report_path": plan.resolution_report_path,
-            "specs_dir": plan.specs_dir,
-            "spec_files": list(plan.spec_files),
-            "template": template,
-            "ground_truth": ground_truth,
-            "mistakes": mistakes[-10:],
-            "resolve_directive": directive,
-            "resolution_required": plan.resolution_required,
-            "critiques": "; ".join(decision.critiques) if decision.critiques else "",
-            "mode": mode,
-            "instructions": instructions,
-        },
-        reflection=decision.reflection.to_dict(),
-    )
+    draft = str(arguments.get("draft_content", "")).strip()
+    reflection, decision = _reflection(arguments, invocation, skill="resolve-ticket", kind="resolution-report", ticket_id=ticket_id, draft=draft, ground_truth=ground_truth)
+    return HandlerResult(product={
+        "ticket_id": ticket_id, "artifact_scope": "tracker", "artifact_kind": "resolution_report",
+        "spec_artifacts": list(plan.spec_artifacts), "template": template, "ground_truth": ground_truth,
+        "resolve_directive": directive, "resolution_required": plan.resolution_required,
+        "critiques": "; ".join(decision.critiques), "mode": decision.mode if draft else "instructions",
+        "instructions": instructions,
+    }, reflection=reflection.to_dict())
 
 
 def handle_review_pr(invocation: Invocation) -> HandlerResult:
-    arguments, instructions = invocation.arguments, invocation.instructions
+    return HandlerResult(product={"pr_number": invocation.arguments["pr_number"], "mode": "instructions", "instructions": invocation.instructions})
+
+
+def _feature_plan(arguments: dict[str, Any], *, mode: str) -> dict[str, Any]:
+    feature_ref = str(arguments.get("feature_ref") or arguments.get("ticket_id") or arguments.get("ref") or "")
+    children = arguments.get("children") if isinstance(arguments.get("children"), list) else []
+    summarized = []
+    for child in children:
+        if not isinstance(child, dict):
+            continue
+        summarized.append(
+            {
+                "key": child.get("key") or child.get("id"),
+                "title": child.get("title"),
+                "state": child.get("state"),
+                "missing_artifacts": child.get("missing_artifacts") or [],
+            }
+        )
+    return {
+        "feature_ref": feature_ref,
+        "mode": mode,
+        "stories": summarized,
+        "ordered_story_keys": [item["key"] for item in summarized if item.get("key")],
+        "pr_base": "feature-branch",
+        "required_artifact_kinds": ["implementation-plan", "verification", "pull_request"],
+    }
+
+
+def handle_feature_implementation(invocation: Invocation) -> HandlerResult:
+    plan = _feature_plan(invocation.arguments, mode="start")
     return HandlerResult(
         product={
-            "pr_number": arguments["pr_number"],
             "mode": "instructions",
-            "instructions": instructions,
+            "skill": "feature-implementation",
+            "plan": plan,
+            "instructions": invocation.instructions,
+        }
+    )
+
+
+def handle_finish_feature_development(invocation: Invocation) -> HandlerResult:
+    plan = _feature_plan(invocation.arguments, mode="finish")
+    return HandlerResult(
+        product={
+            "mode": "instructions",
+            "skill": "finish-feature-development",
+            "plan": plan,
+            "instructions": invocation.instructions,
+        }
+    )
+
+
+def handle_reconcile_feature_stack(invocation: Invocation) -> HandlerResult:
+    plan = _feature_plan(invocation.arguments, mode="reconcile")
+    return HandlerResult(
+        product={
+            "mode": "instructions",
+            "skill": "reconcile-feature-stack",
+            "plan": plan,
+            "instructions": invocation.instructions,
         }
     )
 
 
 def handle_instruction_only(invocation: Invocation) -> HandlerResult:
-    arguments, manifest, instructions = (
-        invocation.arguments,
-        invocation.manifest,
-        invocation.instructions,
-    )
-    return HandlerResult(
-        product={
-            "mode": "instructions",
-            "skill": manifest.get("name", ""),
-            "inputs": arguments,
-            "instructions": instructions,
-        }
-    )
+    return HandlerResult(product={"mode": "instructions", "skill": invocation.manifest.get("name", ""), "inputs": invocation.arguments, "instructions": invocation.instructions})
 
 
 _HANDLERS: dict[str, Callable[[Invocation], HandlerResult]] = {
@@ -226,6 +168,9 @@ _HANDLERS: dict[str, Callable[[Invocation], HandlerResult]] = {
     "write-spec": handle_write_spec,
     "resolve-ticket": handle_resolve_ticket,
     "review-pr": handle_review_pr,
+    "feature-implementation": handle_feature_implementation,
+    "finish-feature-development": handle_finish_feature_development,
+    "reconcile-feature-stack": handle_reconcile_feature_stack,
 }
 
 

@@ -2,17 +2,17 @@ from __future__ import annotations
 
 import json
 import uuid
-from functools import partial
 from collections.abc import Sequence
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 from typing import Any
 
 from .contracts import ProgressSignature, progress_signature
-from .exhaustive import assert_never
 from .evaluator import SemanticEvaluator, collect_critiques, legacy_semantic_evaluator
-from .hooks import authorization_hook, cli_ui_hook
+from .exhaustive import assert_never
 from .failures import Deterministic, Fatal, Transient, classify
+from .hooks import authorization_hook, cli_ui_hook
 from .manifests import capabilities_by_name
 from .schema import validate_inputs
 from .state import Event, QueueState, Task, TaskState

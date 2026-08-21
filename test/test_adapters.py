@@ -1,11 +1,13 @@
 import unittest
-from scripts.orchestrator.state import Task, TaskState
+
 from scripts.orchestrator.adapters import (
-    to_anthropic_dialect, 
-    to_openai_dialect, 
-    to_anthropic_tool, 
-    to_openai_tool
+    to_anthropic_dialect,
+    to_anthropic_tool,
+    to_openai_dialect,
+    to_openai_tool,
 )
+from scripts.orchestrator.state import Task, TaskState
+
 
 class TestAdapters(unittest.TestCase):
     def setUp(self):

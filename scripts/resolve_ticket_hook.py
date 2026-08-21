@@ -1,4 +1,4 @@
-"""Resolve-ticket pre-archive hook.
+"""Resolve-ticket completion hook.
 
 Returns a structured directive when specs or the resolution report are missing.
 """
@@ -17,14 +17,13 @@ from resolution_runtime import ResolutionPlan
 
 
 def on_resolve_ticket(plan: ResolutionPlan) -> dict[str, Any] | None:
-    if plan.specs_missing:
+    if not plan.spec_artifacts:
         return {
             "hook": "resolve-ticket-specs",
             "action": "invoke-write-spec",
             "ticket_id": plan.ticket_id,
-            "specs_dir": plan.specs_dir,
             "message": (
-                f"Ticket {plan.ticket_id} has no specs under {plan.specs_dir}. "
+                f"Ticket {plan.ticket_id} has no specification artifacts. "
                 "Run /write-spec before /resolve-ticket."
             ),
         }
@@ -34,12 +33,12 @@ def on_resolve_ticket(plan: ResolutionPlan) -> dict[str, Any] | None:
             "hook": "resolve-ticket-report",
             "action": "invoke-resolve-report",
             "ticket_id": plan.ticket_id,
-            "resolution_report_path": plan.resolution_report_path,
-            "spec_files": list(plan.spec_files),
+            "artifact_kind": "resolution_report",
+            "spec_artifacts": list(plan.spec_artifacts),
             "source_hints": plan.source_hints,
             "message": (
-                f"Ticket {plan.ticket_id} needs a resolution report at {plan.resolution_report_path} "
-                "before archival. Draft via Actor-Critic, then persist when the Critic is clean."
+                f"Ticket {plan.ticket_id} needs a resolution report artifact "
+                "before completion. Draft via Actor-Critic, then publish when the Critic is clean."
             ),
         }
 

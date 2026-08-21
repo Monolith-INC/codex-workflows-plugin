@@ -1,6 +1,6 @@
 {
   "tool_name": "Bash",
   "tool_input": {
-    "command": "mv /workspace/project/AI_Codex/Tickets/Active/task-123.md /workspace/project/AI_Codex/Tickets/Closed/task-123.md"
+    "command": "mv /workspace/project/work-items/task-123.md /workspace/project/work-items/task-123.md"
   }
 }

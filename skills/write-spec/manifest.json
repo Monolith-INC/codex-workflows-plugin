@@ -1,13 +1,13 @@
 {
   "name": "write-spec",
   "version": "1.0.0",
-  "description": "Generate adversarially reviewed specification files for a ticket using Actor-Critic reflection.",
+  "description": "Generate adversarially reviewed specification artifacts for a work item using Actor-Critic reflection.",
   "input_schema": {
     "type": "object",
     "properties": {
       "ticket_id": {
         "type": "string",
-        "description": "Ticket identifier (e.g., YouTrack issue id)."
+        "description": "Provider work-item identifier."
       },
       "spec_kind": {
         "type": "string",
@@ -26,11 +26,11 @@
   },
   "output_signature": {
     "type": "object",
-    "required": ["ticket_id", "spec_kind", "specs_dir", "mode"],
+    "required": ["ticket_id", "spec_kind", "artifact_scope", "mode"],
     "properties": {
       "ticket_id": { "type": "string" },
       "spec_kind": { "type": "string" },
-      "specs_dir": { "type": "string" },
+      "artifact_scope": { "type": "string" },
       "mode": { "type": "string" },
       "critiques": { "type": "string" }
     }

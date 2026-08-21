@@ -1,7 +1,15 @@
 import json
 import unittest
-from scripts.orchestrator.state import Event, FrozenDict, FrozenList, QueueState, Task, TaskState
+
 from scripts.orchestrator.reducers import reduce_queue_state
+from scripts.orchestrator.state import (
+    Event,
+    FrozenDict,
+    QueueState,
+    Task,
+    TaskState,
+)
+
 
 class TestOrchestratorReducers(unittest.TestCase):
     def setUp(self):

@@ -1,11 +1,9 @@
 import os
 import subprocess
-import sys
 import tempfile
 import unittest
 import zipfile
 from pathlib import Path
-
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 

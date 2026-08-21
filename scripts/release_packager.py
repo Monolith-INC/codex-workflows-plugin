@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import zipfile
+from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
-import zipfile
-from typing import Iterable
 
 
 def build_release_package(*, repo_root: Path, output_dir: Path) -> Path:
@@ -56,7 +56,6 @@ def _iter_release_files(repo_root: Path) -> Iterable[Path]:
         repo_root / "install.sh",
         repo_root / ".mcp.json",
         repo_root / "docs" / "roadmap.md",
-        repo_root / "AI_Codex" / "README.md",
     }
 
     for file_path in allow_files:

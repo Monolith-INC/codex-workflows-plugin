@@ -9,11 +9,11 @@ class PolicyDecision:
     reason: str | None = None
 
     @classmethod
-    def allow(cls) -> "PolicyDecision":
+    def allow(cls) -> PolicyDecision:
         return cls(allowed=True)
 
     @classmethod
-    def deny(cls, reason: str) -> "PolicyDecision":
+    def deny(cls, reason: str) -> PolicyDecision:
         return cls(allowed=False, reason=reason)
 
     def is_denied(self) -> bool:
@@ -26,11 +26,5 @@ class CanonicalToolEvent:
     tool_name: str
     command: str | None = None
     file_path: str | None = None
-    source_path: str | None = None
-    destination_path: str | None = None
     workspace_root: str = ""
-    vault_dir: str = ""
-    session_active: bool = True
-    session_denial_reason: str | None = None
-    is_bugfix_ticket: bool = False
-    ledger_skipped: bool = False
+    branch: str = ""

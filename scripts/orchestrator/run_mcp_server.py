@@ -26,7 +26,7 @@ for _path in (_REPO_ROOT, _SCRIPTS_DIR):
     if _path not in sys.path:
         sys.path.insert(0, _path)
 
-from scripts.orchestrator.mcp_server import main  # noqa: E402
+from scripts.orchestrator.mcp_server import main
 
 if __name__ == "__main__":
     main()

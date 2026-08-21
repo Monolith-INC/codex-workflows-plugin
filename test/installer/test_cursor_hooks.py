@@ -1,6 +1,10 @@
 import unittest
 
-from scripts.installer.cursor_hooks import desired_cursor_hooks, merge_cursor_hooks, strip_managed_cursor_hooks
+from scripts.installer.cursor_hooks import (
+    desired_cursor_hooks,
+    merge_cursor_hooks,
+    strip_managed_cursor_hooks,
+)
 
 
 class TestCursorHooks(unittest.TestCase):

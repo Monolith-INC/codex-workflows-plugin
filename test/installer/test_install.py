@@ -14,7 +14,6 @@ from scripts.installer.bootstrap import (
 )
 from scripts.installer.cli import sync_host_discovery_assets, sync_shared_assets
 
-
 PLUGIN_ROOT = Path(__file__).parent.parent.parent
 
 

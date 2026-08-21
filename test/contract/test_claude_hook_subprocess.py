@@ -4,7 +4,6 @@ import sys
 import unittest
 from pathlib import Path
 
-
 HOOK_PATH = Path(__file__).resolve().parents[2] / "skills" / "codex_workflows" / "scripts" / "claude_enforce_hook.py"
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
