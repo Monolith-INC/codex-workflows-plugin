@@ -17,6 +17,8 @@ from .contracts import (
 )
 from .mcp_client import client_from_connection
 
+_ARTIFACT_ENVELOPE_PREFIX = "codex-workflows-artifact:v1"
+
 
 class TrackerAdapter(ABC):
     def __init__(self, config: dict[str, Any]):
@@ -77,7 +79,11 @@ class LinearTrackerAdapter(TrackerAdapter):
         return _page(self._call("search_work_items", {"query": query, "cursor": cursor}), self.mappings)
 
     def create_work_item(self, kind: str, title: str, description: str, parent_ref: str | None = None) -> WorkItem:
-        args = {"kind": kind, "title": title, "description": description}
+        args = {
+            "kind": self._provider_kind(kind),
+            "title": title,
+            "description": description,
+        }
         if parent_ref:
             args["parentId"] = parent_ref
         return _work_item(self._call("create_work_item", args), self.mappings)
@@ -86,7 +92,8 @@ class LinearTrackerAdapter(TrackerAdapter):
         return _work_item(self._call("transition_work_item", {"id": ref, "state": self._provider_state(state)}), self.mappings)
 
     def list_artifacts(self, ref: str, kind: str | None = None) -> list[ArtifactRef]:
-        return [_artifact(item) for item in _items(self._call("list_artifacts", {"issueId": ref, "kind": kind}))]
+        artifacts = [_artifact(item) for item in _items(self._call("list_artifacts", {"issueId": ref, "kind": kind}))]
+        return [item for item in artifacts if kind is None or item.kind == kind]
 
     def list_children(self, ref: str) -> list[WorkItem]:
         result = self._call("list_children", {"parentId": ref, "parent": ref})
@@ -101,13 +108,24 @@ class LinearTrackerAdapter(TrackerAdapter):
     def publish_artifact(self, ref: str, kind: str, title: str, content: str, revision: str) -> ArtifactRef:
         from .publish import publish_artifact_idempotent
 
+        envelope = _encode_artifact_envelope(kind=kind, title=title, revision=revision, content=content)
         result = publish_artifact_idempotent(
             list_fn=lambda: self.list_artifacts(ref, kind),
             create_fn=lambda: _artifact(
                 self._call(
                     "publish_artifact",
-                    {"issueId": ref, "kind": kind, "title": title, "content": content, "revision": revision},
-                )
+                    {
+                        "issueId": ref,
+                        "kind": kind,
+                        "title": title,
+                        "content": envelope,
+                        "body": envelope,
+                        "revision": revision,
+                    },
+                ),
+                fallback_kind=kind,
+                fallback_title=title,
+                fallback_revision=revision,
             ),
             title=title,
             revision=revision,
@@ -115,14 +133,17 @@ class LinearTrackerAdapter(TrackerAdapter):
         artifact = result["artifact"]
         return ArtifactRef(
             artifact.id,
-            artifact.kind,
-            artifact.title,
-            artifact.revision,
+            artifact.kind or kind,
+            artifact.title or title,
+            artifact.revision or revision,
             artifact.url,
             dict(artifact.provider_data),
             result["outcome"],
             result["attempts"],
         )
+
+    def _provider_kind(self, kind: str) -> str:
+        return str(self.mappings.get("kinds", {}).get(kind, kind))
 
     def _provider_state(self, state: str) -> str:
         return str(self.mappings.get("states", {}).get(state, state))
@@ -145,7 +166,8 @@ class AzureDevOpsTrackerAdapter(TrackerAdapter):
         return _work_item(self._call("transition_work_item", {"id": ref, "state": self._provider_state(state)}), self.mappings)
 
     def list_artifacts(self, ref: str, kind: str | None = None) -> list[ArtifactRef]:
-        return [_artifact(item) for item in _items(self._call("list_artifacts", {"id": ref, "kind": kind}))]
+        artifacts = [_artifact(item) for item in _items(self._call("list_artifacts", {"id": ref, "kind": kind}))]
+        return [item for item in artifacts if kind is None or item.kind == kind]
 
     def list_children(self, ref: str) -> list[WorkItem]:
         parent_id = int(ref) if str(ref).isdigit() else ref
@@ -162,6 +184,7 @@ class AzureDevOpsTrackerAdapter(TrackerAdapter):
     def publish_artifact(self, ref: str, kind: str, title: str, content: str, revision: str) -> ArtifactRef:
         from .publish import publish_artifact_idempotent
 
+        envelope = _encode_artifact_envelope(kind=kind, title=title, revision=revision, content=content)
         result = publish_artifact_idempotent(
             list_fn=lambda: self.list_artifacts(ref, kind),
             create_fn=lambda: _artifact(
@@ -171,10 +194,14 @@ class AzureDevOpsTrackerAdapter(TrackerAdapter):
                         "id": int(ref) if str(ref).isdigit() else ref,
                         "kind": kind,
                         "title": title,
-                        "content": content,
+                        "content": envelope,
+                        "text": envelope,
                         "revision": revision,
                     },
-                )
+                ),
+                fallback_kind=kind,
+                fallback_title=title,
+                fallback_revision=revision,
             ),
             title=title,
             revision=revision,
@@ -182,9 +209,9 @@ class AzureDevOpsTrackerAdapter(TrackerAdapter):
         artifact = result["artifact"]
         return ArtifactRef(
             artifact.id,
-            artifact.kind,
-            artifact.title,
-            artifact.revision,
+            artifact.kind or kind,
+            artifact.title or title,
+            artifact.revision or revision,
             artifact.url,
             dict(artifact.provider_data),
             result["outcome"],
@@ -198,13 +225,16 @@ class AzureDevOpsTrackerAdapter(TrackerAdapter):
 class ScmAdapter(ABC):
     def __init__(self, config: dict[str, Any]):
         self.config = config
-        self.client = client_from_connection(config["connection"])
+        connection = config.get("connection") or {}
+        self.client = client_from_connection(connection) if connection.get("command") else None
         self.bindings = config.get("bindings", {})
 
     def _call(self, operation: str, arguments: dict[str, Any]) -> Any:
         tool = self.bindings.get(operation)
         if not isinstance(tool, str) or not tool:
             raise IntegrationError("unsupported_capability", f"SCM operation is not configured: {operation}")
+        if self.client is None:
+            raise IntegrationError("provider_unavailable", "SCM MCP client is not configured.")
         return self.client.call(tool, arguments)
 
     def get_pull_request(self, ref: str) -> PullRequest:
@@ -225,6 +255,11 @@ class ScmAdapter(ABC):
 
 class GitHubScmAdapter(ScmAdapter):
     """GitHub transport using the authenticated ``gh`` CLI."""
+
+    def __init__(self, config: dict[str, Any]):
+        self.config = config
+        self.client = None
+        self.bindings = config.get("bindings", {})
 
     def _run(self, args: list[str]) -> Any:
         try:
@@ -402,10 +437,60 @@ def _reverse_mapping(value: str, mapping: dict[str, Any], fallback: str) -> str:
     return fallback
 
 
-def _artifact(value: Any) -> ArtifactRef:
+def _encode_artifact_envelope(*, kind: str, title: str, revision: str, content: str) -> str:
+    header = json.dumps({"kind": kind, "title": title, "revision": revision}, sort_keys=True)
+    return f"{_ARTIFACT_ENVELOPE_PREFIX} {header}\n{content}"
+
+
+def _parse_artifact_envelope(text: str) -> dict[str, str] | None:
+    if not isinstance(text, str) or not text.startswith(_ARTIFACT_ENVELOPE_PREFIX):
+        return None
+    rest = text[len(_ARTIFACT_ENVELOPE_PREFIX) :].lstrip()
+    header_line, _, body = rest.partition("\n")
+    try:
+        header = json.loads(header_line)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(header, dict):
+        return None
+    return {
+        "kind": str(header.get("kind") or "artifact"),
+        "title": str(header.get("title") or ""),
+        "revision": str(header.get("revision") or ""),
+        "content": body,
+    }
+
+
+def _artifact(
+    value: Any,
+    *,
+    fallback_kind: str = "artifact",
+    fallback_title: str = "",
+    fallback_revision: str = "",
+) -> ArtifactRef:
+    if isinstance(value, str):
+        value = {"body": value, "content": value}
     if not isinstance(value, dict):
         raise IntegrationError("provider_error", "Provider returned an invalid artifact payload.")
-    return ArtifactRef(str(value.get("id") or value.get("url") or ""), str(value.get("kind") or "artifact"), str(value.get("title") or ""), str(value.get("revision") or ""), value.get("url"), value)
+    text = str(value.get("content") or value.get("body") or value.get("text") or value.get("comment") or "")
+    parsed = _parse_artifact_envelope(text)
+    if parsed is not None:
+        return ArtifactRef(
+            str(value.get("id") or value.get("url") or ""),
+            parsed["kind"],
+            parsed["title"],
+            parsed["revision"],
+            value.get("url"),
+            {**value, "content": parsed["content"]},
+        )
+    return ArtifactRef(
+        str(value.get("id") or value.get("url") or ""),
+        str(value.get("kind") or fallback_kind or "artifact"),
+        str(value.get("title") or fallback_title or ""),
+        str(value.get("revision") or fallback_revision or ""),
+        value.get("url"),
+        value,
+    )
 
 
 def _pull_request(value: Any) -> PullRequest:

@@ -199,6 +199,7 @@ def configure_integrations(
     scm_cfg = payload["scm"]
     tracker_discovery = None
     scm_discovery = None
+    discovery_errors: list[str] = []
     if discover:
         try:
             tracker_discovery = discover_provider_capabilities(
@@ -207,14 +208,9 @@ def configure_integrations(
                 connection=tracker_cfg.get("connection") or {},
                 preferred_bindings=tracker_cfg.get("bindings") or {},
             )
-        except Exception:
-            tracker_discovery = discover_provider_capabilities(
-                kind="tracker",
-                adapter=str(tracker_cfg.get("adapter")),
-                connection=tracker_cfg.get("connection") or {},
-                preferred_bindings=tracker_cfg.get("bindings") or {},
-                discovered_tools=list((tracker_cfg.get("bindings") or {}).values()),
-            )
+        except Exception as exc:
+            discovery_errors.append(f"tracker discovery failed: {exc}")
+            tracker_discovery = None
         try:
             scm_discovery = discover_provider_capabilities(
                 kind="scm",
@@ -222,15 +218,23 @@ def configure_integrations(
                 connection=scm_cfg.get("connection") or {},
                 preferred_bindings=scm_cfg.get("bindings") or {},
             )
-        except Exception:
-            scm_discovery = discover_provider_capabilities(
-                kind="scm",
-                adapter=str(scm_cfg.get("adapter")),
-                connection=scm_cfg.get("connection") or {},
-                preferred_bindings=scm_cfg.get("bindings") or {},
-                discovered_tools=list((scm_cfg.get("bindings") or {}).values()) or ["gh"],
+        except Exception as exc:
+            discovery_errors.append(f"scm discovery failed: {exc}")
+            scm_discovery = None
+        if tracker_discovery is not None or scm_discovery is not None:
+            payload = apply_discovery_to_config(
+                payload,
+                tracker_discovery=tracker_discovery,
+                scm_discovery=scm_discovery,
             )
-        payload = apply_discovery_to_config(payload, tracker_discovery=tracker_discovery, scm_discovery=scm_discovery)
+        if discovery_errors:
+            payload = dict(payload)
+            payload["discoveryErrors"] = discovery_errors
+            print(
+                "WARNING: provider capability discovery did not fully succeed:\n  - "
+                + "\n  - ".join(discovery_errors),
+                file=sys.stderr,
+            )
     else:
         presets = mapping_presets(str(tracker_cfg.get("adapter")))
         tracker_cfg = dict(tracker_cfg)

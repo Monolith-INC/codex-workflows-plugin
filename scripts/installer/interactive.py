@@ -67,6 +67,7 @@ class WizardAnswers:
     scm: str = "github"
     tracker_scope: str = ""
     branch_template: str = "{category}/{key}-{slug}"
+    confirmed_mappings: dict | None = None
 
 
 @dataclass
@@ -281,6 +282,7 @@ def collect_answers(io: WizardIO, *, cwd: Path | None = None) -> WizardAnswers:
         scm=scm,
         tracker_scope=tracker_scope,
         branch_template=branch_template,
+        confirmed_mappings=presets,
     )
 
 
@@ -311,9 +313,18 @@ def run_bootstrap(
     old_argv = sys.argv
     try:
         sys.argv = ["bootstrap.py", *argv]
-        return int(bootstrap_mod.main())
+        code = int(bootstrap_mod.main())
     finally:
         sys.argv = old_argv
+    if code == 0 and answers.confirmed_mappings and not answers.uninstall:
+        config_path = answers.dest / ".codex-workflows" / "integrations.json"
+        if config_path.is_file():
+            payload = json.loads(config_path.read_text(encoding="utf-8"))
+            tracker = dict(payload.get("tracker") or {})
+            tracker["mappings"] = answers.confirmed_mappings
+            payload["tracker"] = tracker
+            config_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return code
 
 
 def verify_install(dest: Path, target: str) -> list[CheckResult]:

@@ -219,6 +219,38 @@ class AdapterContractTests(unittest.TestCase):
         self.assertIn("Work item: CW-1", edits[0][edits[0].index("--body") + 1])
 
 
+
+    def test_comment_body_envelope_round_trip(self):
+        from scripts.integrations.adapters import _artifact, _encode_artifact_envelope
+
+        body = _encode_artifact_envelope(kind="tech_spec", title="Spec", revision="3", content="# Body")
+        artifact = _artifact({"id": "c1", "body": body})
+        self.assertEqual(artifact.kind, "tech_spec")
+        self.assertEqual(artifact.title, "Spec")
+        self.assertEqual(artifact.revision, "3")
+        self.assertIn("# Body", str(artifact.provider_data.get("content")))
+
+    def test_linear_create_maps_kind(self):
+        calls = []
+
+        class FakeClient:
+            def call(self, tool, arguments):
+                calls.append((tool, arguments))
+                return {"id": "1", "identifier": "ABC-1", "title": arguments["title"], "kind": arguments["kind"], "state": "Backlog"}
+
+        adapter = LinearTrackerAdapter(
+            {
+                "adapter": "linear",
+                "connection": {"command": "true", "args": []},
+                "bindings": {"create_work_item": "create_issue"},
+                "mappings": {"kinds": {"feature": "Feature"}, "states": {}},
+            }
+        )
+        adapter.client = FakeClient()
+        item = adapter.create_work_item("feature", "Title", "desc")
+        self.assertEqual(calls[0][1]["kind"], "Feature")
+        self.assertEqual(item.key, "ABC-1")
+
 class PublishHelperTests(unittest.TestCase):
     def test_reused_skips_create(self):
         calls = {"create": 0}
@@ -269,6 +301,33 @@ class PublishHelperTests(unittest.TestCase):
         with self.assertRaises(IntegrationError):
             publish_artifact_idempotent(list_fn=list_fn, create_fn=create_fn, title="Spec", revision="1", sleep_fn=lambda _: None)
         self.assertEqual(attempts["n"], 1)
+
+
+
+    def test_retryable_timeout_reliists_before_duplicate(self):
+        attempts = {"n": 0}
+        listed = {"n": 0}
+        created = ArtifactRef("2", "spec", "Spec", "1")
+
+        def list_fn():
+            listed["n"] += 1
+            if attempts["n"] >= 1:
+                return [created]
+            return []
+
+        def create_fn():
+            attempts["n"] += 1
+            raise IntegrationError("provider_timeout", "slow", retryable=True)
+
+        result = publish_artifact_idempotent(
+            list_fn=list_fn,
+            create_fn=create_fn,
+            title="Spec",
+            revision="1",
+            sleep_fn=lambda _s: None,
+        )
+        self.assertEqual(result["outcome"], "reused")
+        self.assertGreaterEqual(listed["n"], 2)
 
 
 if __name__ == "__main__":
