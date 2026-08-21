@@ -270,6 +270,12 @@ class GitHubScmAdapter(ScmAdapter):
         return self._run(["api", "-X", "POST", f"repos/{owner}/{repo}/pulls/{pr_ref}/comments/{thread_ref}/replies", "-f", f"body={content}"])
 
     def link_work_item(self, pr_ref: str, work_item_ref: str) -> dict[str, Any]:
+        current = self._run(["pr", "view", pr_ref, *self._repo_args(), "--json", "body"])
+        body = str((current or {}).get("body") or "") if isinstance(current, dict) else ""
+        marker = f"Work item: {work_item_ref}"
+        if marker not in body:
+            updated = f"{body.rstrip()}\n\n{marker}\n" if body.strip() else f"{marker}\n"
+            self._run_text(["pr", "edit", pr_ref, *self._repo_args(), "--body", updated])
         return {"linked": True, "mechanism": "pull-request-body", "workItem": work_item_ref, "pullRequest": pr_ref}
 
 

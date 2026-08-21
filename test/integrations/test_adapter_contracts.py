@@ -196,6 +196,27 @@ class AdapterContractTests(unittest.TestCase):
         pr = adapter.get_pull_request("3")
         self.assertEqual(pr.title, "Hello")
         self.assertEqual(pr.source_branch, "feature/x")
+        self.assertEqual(pr.target_branch, "main")
+
+    def test_github_link_work_item_persists_body_marker(self):
+        adapter = GitHubScmAdapter({"adapter": "github", "owner": "o", "repo": "r", "connection": {"command": "true", "args": []}, "bindings": {}})
+        edits: list[list[str]] = []
+
+        def fake_run(args: list[str]) -> Any:
+            if args[:2] == ["pr", "view"]:
+                return {"body": "Existing body"}
+            return {}
+
+        def fake_run_text(args: list[str]) -> str:
+            edits.append(args)
+            return ""
+
+        adapter._run = fake_run  # type: ignore[method-assign]
+        adapter._run_text = fake_run_text  # type: ignore[method-assign]
+        result = adapter.link_work_item("3", "CW-1")
+        self.assertTrue(result["linked"])
+        self.assertEqual(edits[0][:2], ["pr", "edit"])
+        self.assertIn("Work item: CW-1", edits[0][edits[0].index("--body") + 1])
 
 
 class PublishHelperTests(unittest.TestCase):

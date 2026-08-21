@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import json
 import os
+import select
 import subprocess
 import time
 from typing import Any
 
 from .contracts import IntegrationError
+
+_MCP_PROTOCOL_VERSION = "2024-11-05"
+_CLIENT_INFO = {"name": "codex-workflows-integrations", "version": "1.0.0"}
 
 
 class StdioMcpClient:
@@ -67,7 +71,19 @@ class StdioMcpClient:
             raise IntegrationError("provider_unavailable", f"Could not start provider tool: {exc}") from exc
 
         try:
-            self._send(process, {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})
+            self._send(
+                process,
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "initialize",
+                    "params": {
+                        "protocolVersion": _MCP_PROTOCOL_VERSION,
+                        "capabilities": {},
+                        "clientInfo": dict(_CLIENT_INFO),
+                    },
+                },
+            )
             self._read_response(process, 1)
             self._send(process, {"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}})
             self._send(process, request)
@@ -88,7 +104,13 @@ class StdioMcpClient:
         if process.stdout is None:
             raise IntegrationError("provider_unavailable", "Provider stdout is unavailable.")
         deadline = time.monotonic() + self.timeout
-        while time.monotonic() < deadline:
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            ready, _, _ = select.select([process.stdout], [], [], remaining)
+            if not ready:
+                break
             line = process.stdout.readline()
             if not line:
                 break
@@ -106,7 +128,9 @@ def client_from_connection(connection: dict[str, Any]) -> StdioMcpClient:
     args = connection.get("args", [])
     if not isinstance(command, str) or not command or not isinstance(args, list):
         raise IntegrationError("invalid_config", "Provider connection requires command and args.")
-    return StdioMcpClient(command, [str(item) for item in args], timeout=float(connection.get("timeout", 30)))
+    expanded_command = os.path.expandvars(command)
+    expanded_args = [os.path.expandvars(str(item)) for item in args]
+    return StdioMcpClient(expanded_command, expanded_args, timeout=float(connection.get("timeout", 30)))
 
 
 def _decode_content(content: Any, fallback: Any) -> Any:

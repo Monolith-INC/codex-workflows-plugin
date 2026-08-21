@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -185,7 +186,7 @@ def configure_integrations(
     else:
         if "{key}" not in branch_template:
             raise ValueError("branch template must contain {key}")
-        tracker_config = _default_tracker_config(tracker, tracker_scope)
+        tracker_config = _default_tracker_config(tracker, tracker_scope, project_dest)
         tracker_config["branchPattern"] = branch_template
         payload = {
             "schemaVersion": 1,
@@ -248,7 +249,7 @@ def configure_integrations(
     return path
 
 
-def _default_tracker_config(provider: str, scope: str) -> dict:
+def _default_tracker_config(provider: str, scope: str, project_dest: Path | None = None) -> dict:
     from scripts.integrations.discovery import mapping_presets
 
     presets = mapping_presets(provider)
@@ -275,7 +276,7 @@ def _default_tracker_config(provider: str, scope: str) -> dict:
             "scope": scope,
             "connection": {
                 "command": "npx",
-                "args": ["-y", "@azure-devops/mcp", "${AZURE_DEVOPS_ORG}", "-d", "core", "work-items", "repositories"],
+                "args": ["-y", "@azure-devops/mcp", _azure_org_arg(project_dest), "-d", "core", "work-items", "repositories"],
             },
             "mappings": presets,
             "bindings": {
@@ -303,7 +304,10 @@ def _default_scm_config(provider: str, project_dest: Path) -> dict:
             "organization": org,
             "project": project,
             "repository": repo,
-            "connection": {"command": "npx", "args": ["-y", "@azure-devops/mcp", "${AZURE_DEVOPS_ORG}", "-d", "core", "repositories", "work-items"]},
+            "connection": {
+                "command": "npx",
+                "args": ["-y", "@azure-devops/mcp", _azure_org_arg(project_dest, fallback=org), "-d", "core", "repositories", "work-items"],
+            },
             "bindings": {
                 "get_pull_request": "repo_get_pull_request_by_id",
                 "create_pull_request": "repo_create_pull_request",
@@ -313,6 +317,20 @@ def _default_scm_config(provider: str, project_dest: Path) -> dict:
             },
         }
     raise ValueError(f"unsupported SCM: {provider}")
+
+
+def _azure_org_arg(project_dest: Path | None = None, *, fallback: str = "") -> str:
+    """Resolve Azure org for MCP argv; expandvars still applies at client spawn."""
+    env_org = os.environ.get("AZURE_DEVOPS_ORG", "").strip()
+    if env_org:
+        return env_org
+    if fallback.strip():
+        return fallback.strip()
+    if project_dest is not None:
+        org, _, _ = _azure_remote(project_dest)
+        if org:
+            return org
+    return "${AZURE_DEVOPS_ORG}"
 
 
 def _github_remote(project_dest: Path) -> tuple[str, str]:
