@@ -56,6 +56,8 @@ def _iter_release_files(repo_root: Path) -> Iterable[Path]:
         repo_root / "install.sh",
         repo_root / ".mcp.json",
         repo_root / "docs" / "roadmap.md",
+        repo_root / "docs" / "provider-neutral-workflow.md",
+        repo_root / "CHANGELOG.md",
     }
 
     for file_path in allow_files:

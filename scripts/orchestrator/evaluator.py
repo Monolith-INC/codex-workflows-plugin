@@ -15,7 +15,7 @@ def skill_validation_critiques(output: dict[str, Any]) -> list[str]:
 def legacy_semantic_evaluator(
     output: dict[str, Any], _manifest: Mapping[str, Any]
 ) -> list[str]:
-    """Interpret the version 0.5.20 ``mode``/``critiques`` convention.
+    """Interpret the version 0.5.x ``mode``/``critiques`` convention.
 
     This adapter preserves existing handlers. It is deliberately named as
     compatibility behavior: accepting a producer's self-report is not an
