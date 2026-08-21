@@ -23,9 +23,10 @@ from adapters import (
     parse_cursor_payload,
     parse_gemini_payload,
 )
+from policy.git_branch_guard import evaluate_git_branch_guard
+
 from scripts import hook_runtime
 from scripts.hook_runtime import select_adapter
-from policy.git_branch_guard import evaluate_git_branch_guard
 
 
 class TestHookRuntime(unittest.TestCase):

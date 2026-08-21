@@ -14,7 +14,7 @@ _SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
 if _SCRIPTS_DIR not in sys.path:
     sys.path.insert(0, _SCRIPTS_DIR)
 
-from adapters import (  # noqa: E402
+from adapters import (
     format_antigravity_decision,
     format_claude_decision,
     format_codex_decision,
@@ -26,11 +26,11 @@ from adapters import (  # noqa: E402
     parse_cursor_payload,
     parse_gemini_payload,
 )
-from integrations.adapters import tracker_adapter  # noqa: E402
-from integrations.config import load_config  # noqa: E402
-from integrations.contracts import IntegrationError  # noqa: E402
-from policy import CanonicalToolEvent, PolicyDecision  # noqa: E402
-from policy.git_branch_guard import evaluate_git_branch_guard  # noqa: E402
+from integrations.adapters import tracker_adapter
+from integrations.config import load_config
+from integrations.contracts import IntegrationError
+from policy import CanonicalToolEvent, PolicyDecision
+from policy.git_branch_guard import evaluate_git_branch_guard
 
 LOG_FILE = "/tmp/codex_hook_debug.log"
 _WRITE_TOOLS = frozenset({"write_to_file", "replace_file_content", "multi_replace_file_content", "Write", "StrReplace", "Edit", "Delete", "delete_file", "delete", "apply_patch"})
@@ -140,7 +140,7 @@ def _evaluate_work_context(event: CanonicalToolEvent) -> PolicyDecision:
         if item.state.value != "in_progress":
             return PolicyDecision.deny(f"Work item {item.key} must be in progress before code changes are allowed.")
         kinds = {_artifact_kind(artifact.kind) for artifact in tracker.list_artifacts(item.id)}
-        if not ({"spec", "tech-spec", "design-doc", "implementation-plan", "bugfix-spec"} & kinds):
+        if not ({"spec", "tech_spec", "tech-spec", "design_doc", "design-doc", "implementation_plan", "implementation-plan", "bugfix_spec", "bugfix-spec"} & kinds):
             return PolicyDecision.deny(f"Work item {item.key} has no accepted specification artifact.")
         return PolicyDecision.allow()
     except IntegrationError as exc:
