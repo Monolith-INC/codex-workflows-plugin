@@ -17,6 +17,14 @@
 5. Create/link a pull request through the SCM adapter.
 6. Publish resolution and verification artifacts, then request logical `done`.
 
+## Feature/story checkpoint
+
+1. Resolve the feature work item and list child stories through the tracker adapter.
+2. Publish the feature implementation plan; create the feature branch from the bootstrap template.
+3. Implement stories on stacked branches with pull requests targeting the feature branch.
+4. Reconcile ancestor updates into descendants before further descendant commits.
+5. After stories complete, open the feature→trunk pull request, publish closeout artifacts, and request logical `done`.
+
 ## Interruption recovery
 
 On restart, rerun bootstrap verification, read the configured work item and its artifacts, inspect the linked pull request, and continue from the first incomplete checkpoint. The orchestrator does not reconstruct local session files. If the gateway, credentials, or mappings are unavailable, hooks fail closed; repair the integration configuration and rerun verification before writing.
