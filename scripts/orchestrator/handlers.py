@@ -98,6 +98,67 @@ def handle_review_pr(invocation: Invocation) -> HandlerResult:
     return HandlerResult(product={"pr_number": invocation.arguments["pr_number"], "mode": "instructions", "instructions": invocation.instructions})
 
 
+def _feature_plan(arguments: dict[str, Any], *, mode: str) -> dict[str, Any]:
+    feature_ref = str(arguments.get("feature_ref") or arguments.get("ticket_id") or arguments.get("ref") or "")
+    children = arguments.get("children") if isinstance(arguments.get("children"), list) else []
+    summarized = []
+    for child in children:
+        if not isinstance(child, dict):
+            continue
+        summarized.append(
+            {
+                "key": child.get("key") or child.get("id"),
+                "title": child.get("title"),
+                "state": child.get("state"),
+                "missing_artifacts": child.get("missing_artifacts") or [],
+            }
+        )
+    return {
+        "feature_ref": feature_ref,
+        "mode": mode,
+        "stories": summarized,
+        "ordered_story_keys": [item["key"] for item in summarized if item.get("key")],
+        "pr_base": "feature-branch",
+        "required_artifact_kinds": ["implementation-plan", "verification", "pull_request"],
+    }
+
+
+def handle_feature_implementation(invocation: Invocation) -> HandlerResult:
+    plan = _feature_plan(invocation.arguments, mode="start")
+    return HandlerResult(
+        product={
+            "mode": "instructions",
+            "skill": "feature-implementation",
+            "plan": plan,
+            "instructions": invocation.instructions,
+        }
+    )
+
+
+def handle_finish_feature_development(invocation: Invocation) -> HandlerResult:
+    plan = _feature_plan(invocation.arguments, mode="finish")
+    return HandlerResult(
+        product={
+            "mode": "instructions",
+            "skill": "finish-feature-development",
+            "plan": plan,
+            "instructions": invocation.instructions,
+        }
+    )
+
+
+def handle_reconcile_feature_stack(invocation: Invocation) -> HandlerResult:
+    plan = _feature_plan(invocation.arguments, mode="reconcile")
+    return HandlerResult(
+        product={
+            "mode": "instructions",
+            "skill": "reconcile-feature-stack",
+            "plan": plan,
+            "instructions": invocation.instructions,
+        }
+    )
+
+
 def handle_instruction_only(invocation: Invocation) -> HandlerResult:
     return HandlerResult(product={"mode": "instructions", "skill": invocation.manifest.get("name", ""), "inputs": invocation.arguments, "instructions": invocation.instructions})
 
@@ -107,6 +168,9 @@ _HANDLERS: dict[str, Callable[[Invocation], HandlerResult]] = {
     "write-spec": handle_write_spec,
     "resolve-ticket": handle_resolve_ticket,
     "review-pr": handle_review_pr,
+    "feature-implementation": handle_feature_implementation,
+    "finish-feature-development": handle_finish_feature_development,
+    "reconcile-feature-stack": handle_reconcile_feature_stack,
 }
 
 
