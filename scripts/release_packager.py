@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import zipfile
+from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
-import zipfile
-from typing import Iterable
 
 
 def build_release_package(*, repo_root: Path, output_dir: Path) -> Path:

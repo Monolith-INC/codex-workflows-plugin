@@ -4,10 +4,10 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
-from .exhaustive import assert_never
 from .adapters import to_anthropic_dialect
-from .handlers import get_handler
+from .exhaustive import assert_never
 from .failures import HandlerContractError, InputContractError
+from .handlers import get_handler
 from .invocation import HandlerResult, Invocation
 from .manifests import CapabilityManifest, load_skill_instructions
 from .schema import validate_inputs

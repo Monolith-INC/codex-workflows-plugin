@@ -3,13 +3,13 @@ from __future__ import annotations
 import argparse
 import json
 import shutil
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from .cursor_hooks import desired_cursor_hooks, merge_cursor_hooks
 from .merge import merge_hook_configs
-from .targets import Target, normalize_target, target_config_paths, target_hook_command
+from .targets import Target, normalize_target, target_config_paths
 
 
 @dataclass(frozen=True)

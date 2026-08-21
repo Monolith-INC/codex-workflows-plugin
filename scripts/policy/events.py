@@ -9,11 +9,11 @@ class PolicyDecision:
     reason: str | None = None
 
     @classmethod
-    def allow(cls) -> "PolicyDecision":
+    def allow(cls) -> PolicyDecision:
         return cls(allowed=True)
 
     @classmethod
-    def deny(cls, reason: str) -> "PolicyDecision":
+    def deny(cls, reason: str) -> PolicyDecision:
         return cls(allowed=False, reason=reason)
 
     def is_denied(self) -> bool:

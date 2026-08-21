@@ -8,7 +8,6 @@ from typing import Any
 
 from .targets import Target, target_config_paths
 
-
 PLUGIN_NAME = "codex-workflows-plugin"
 _MANAGED_HOOK_MARKERS = ("codex-workflows-plugin", "codex_workflows", "workflow-integrations")
 

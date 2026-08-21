@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import subprocess
-from typing import Any
 
 
 def _run_git_cmd(args: list[str], cwd: str, timeout: float | None = None) -> str:

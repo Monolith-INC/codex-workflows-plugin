@@ -1,5 +1,4 @@
 import unittest
-from pathlib import Path
 
 from scripts.installer import install
 from scripts.installer.cli import _plugin_root

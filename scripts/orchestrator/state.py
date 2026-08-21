@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import dataclasses
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Mapping
+from typing import Any
 
 
 class FrozenDict(dict):
@@ -101,7 +102,7 @@ class Task:
         object.__setattr__(self, "critiques", tuple(self.critiques))
         object.__setattr__(self, "output", deep_freeze(self.output))
 
-    def copy_with(self, **kwargs: Any) -> "Task":
+    def copy_with(self, **kwargs: Any) -> Task:
         """Return a new immutable task with the requested fields replaced."""
         return dataclasses.replace(self, **kwargs)
 
@@ -117,6 +118,6 @@ class QueueState:
         object.__setattr__(self, "tasks", deep_freeze(self.tasks))
         object.__setattr__(self, "events_history", tuple(self.events_history))
 
-    def copy_with(self, **kwargs: Any) -> "QueueState":
+    def copy_with(self, **kwargs: Any) -> QueueState:
         """Return a new immutable queue with the requested fields replaced."""
         return dataclasses.replace(self, **kwargs)

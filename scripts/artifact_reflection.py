@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
 
-PLACEHOLDER_PATTERN = re.compile(r"\b(TODO|TBD|FIXME|XXX|\?\?\?|<fill[- ]?in>)\b", re.I)
+PLACEHOLDER_PATTERN = re.compile(r"\b(TODO|TBD|FIXME|XXX|\?\?\?|<fill[- ]?in>)\b", re.IGNORECASE)
 
 
 @dataclass

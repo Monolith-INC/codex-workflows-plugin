@@ -1,5 +1,5 @@
 from collections import deque
-from typing import Callable, List
+from collections.abc import Callable
 
 from .reducers import reduce_queue_state
 from .state import Event, QueueState
@@ -11,7 +11,7 @@ class OrchestratorStream:
     def __init__(self, initial_state: QueueState, *, max_retries: int = 3) -> None:
         self.state = initial_state
         self.max_retries = max_retries
-        self.listeners: List[Callable[[QueueState, Event, "OrchestratorStream"], None]] = []
+        self.listeners: list[Callable[[QueueState, Event, OrchestratorStream], None]] = []
         self._queue: deque[Event] = deque()
         self._dispatching = False
 

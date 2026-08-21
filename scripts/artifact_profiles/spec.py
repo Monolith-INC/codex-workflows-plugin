@@ -1,12 +1,8 @@
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING
 
 from artifact_reflection import ArtifactContext, CriticProfile
-
-if TYPE_CHECKING:
-    pass
 
 SPEC_REQUIRED_HEADINGS: dict[str, tuple[str, ...]] = {
     "rfc": ("Summary", "Motivation", "Proposal", "Alternatives", "Open Questions"),

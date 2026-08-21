@@ -1,11 +1,12 @@
-import unittest
-from unittest.mock import patch
-from io import StringIO
 import sys
+import unittest
+from io import StringIO
+from unittest.mock import patch
 
-from scripts.orchestrator.state import QueueState, Task, TaskState, Event
+from scripts.orchestrator.hooks import authorization_hook, cli_ui_hook
+from scripts.orchestrator.state import Event, QueueState, Task, TaskState
 from scripts.orchestrator.stream import OrchestratorStream
-from scripts.orchestrator.hooks import cli_ui_hook, authorization_hook
+
 
 class TestHooksAndStream(unittest.TestCase):
     def setUp(self):

@@ -1,6 +1,8 @@
 import json
-from typing import Dict, Any
+from typing import Any
+
 from .state import Task
+
 
 def to_anthropic_dialect(instructions: str, task: Task) -> str:
     """Translates universal instructions into Anthropic's XML-heavy dialect."""
@@ -41,7 +43,7 @@ def to_openai_dialect(instructions: str, task: Task) -> str:
             
     return prompt
 
-def to_anthropic_tool(manifest: Dict[str, Any]) -> Dict[str, Any]:
+def to_anthropic_tool(manifest: dict[str, Any]) -> dict[str, Any]:
     """Translates a skill manifest into an Anthropic tool schema."""
     return {
         "name": manifest.get("name", "tool"),
@@ -49,7 +51,7 @@ def to_anthropic_tool(manifest: Dict[str, Any]) -> Dict[str, Any]:
         "input_schema": manifest.get("input_schema", {})
     }
 
-def to_openai_tool(manifest: Dict[str, Any]) -> Dict[str, Any]:
+def to_openai_tool(manifest: dict[str, Any]) -> dict[str, Any]:
     """Translates a skill manifest into an OpenAI function schema."""
     return {
         "type": "function",
