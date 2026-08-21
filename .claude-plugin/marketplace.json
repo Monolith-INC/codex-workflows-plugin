@@ -1,14 +1,14 @@
 {
   "name": "local",
   "owner": {
-    "name": "Th\u00e9o Carranza"
+    "name": "Monolith-INC"
   },
   "description": "Local plugin marketplace for codex-workflows-plugin.",
   "plugins": [
     {
       "name": "codex-workflows-plugin",
       "source": "./",
-      "description": "Client-adaptive workflow and enforcement plugin for Codex-style agent hosts.",
+      "description": "Provider-neutral work-item workflows with adapter-backed tracker/SCM integrations and fail-closed hooks",
       "version": "0.5.21"
     }
   ]

@@ -1,17 +1,34 @@
 ---
 name: bootstrap
-description: >-
-  Use when the user asks to install, wire, update, or uninstall the
-  codex-workflows-plugin into a project (local --dest install only).
+description: Use when the user asks to install, wire, update, or uninstall the codex-workflows-plugin into a project, or to (re)configure tracker/SCM integrations.
 ---
 
-# bootstrap
+# Bootstrap
 
-Install this plugin into a **project** with `--dest`. Global install is not supported.
+## End-user install (preferred)
+
+From the application repository the user wants to govern:
 
 ```bash
-  python3 -m scripts.installer.bootstrap --target all-agents --dest /path/to/project \\
-    --tracker linear --scm github --branch-template '{category}/{key}-{slug}'
+bash <(curl -fsSL https://github.com/Monolith-INC/codex-workflows-plugin/releases/latest/download/install.sh)
 ```
 
-Runtime lands at `<dest>/.codex-workflows/`. The wizard offers Linear or Azure DevOps Boards, GitHub or Azure Repos, and branch presets plus `other`; custom templates must contain `{key}`. It writes `.codex-workflows/integrations.json` and wires both `agentic-orchestrator` and `workflow-integrations` MCP servers. Discovery trees are `.claude/skills`, `.claude/commands`, and `.agents/skills`.
+That downloads the latest release, wires the selected agent host(s), and writes `.codex-workflows/integrations.json` (tracker, SCM, mappings, branch template with `{key}`). Do not ask the user to clone this plugin repo for normal installs.
+
+CI / non-interactive:
+
+```bash
+curl -fsSL https://github.com/Monolith-INC/codex-workflows-plugin/releases/latest/download/install.sh \
+  | bash -s -- --dest /absolute/path/to/your-app
+```
+
+## Reconfigure an existing install
+
+If the runtime is already present under `<project>/.codex-workflows/`, re-run the installer wizard or:
+
+```bash
+python3 -m scripts.installer.bootstrap --dest <project> --target all-agents \
+  --tracker linear --scm github --branch-template '{category}/{key}-{slug}'
+```
+
+Preserve `integrations.json` across reinstalls unless the user asks to reset it. Verify both `agentic-orchestrator` and `workflow-integrations` MCP servers after wiring. Restart the agent session when done.

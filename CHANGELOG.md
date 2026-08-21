@@ -28,6 +28,6 @@
 ## 0.5.20
 
 - `review-pr` dual SCM support: GitHub via `gh` / Azure DevOps via MCP
-- First-run SETUP writes project-local `.codex-workflows/scm-provider.json`
+- First-run SETUP wrote project-local `.codex-workflows/scm-provider.json` (superseded by `integrations.json` in 0.5.21)
 - GitHub path requires `-R` from settings; REST fallback is root-comment only
 - Azure mechanics use settings `repo` (no origin re-parse during INGEST/ACT)

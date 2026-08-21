@@ -1,14 +1,7 @@
 ---
-name: finish-feature-development
-description: Plan and implement an Active Feature using stacked Feature and User Story branches.
+description: Finish a feature after child stories complete: feature PR, closeout artifacts, done
 ---
 
-# finish-feature-development
+# Finish Feature Development
 
-Plan and drive implementation of an Active Feature with a two-tier stacked branch workflow.
-
-Follow `skills/finish-feature-development/SKILL.md`.
-
-Usage: `/finish-feature-development <feature_id>`
-
-Example: `/finish-feature-development F-2041`
+Use the matching skill. Resolve the feature and children through the configured tracker adapter; use the SCM adapter for branches and pull requests. Durable state stays on the tracker — do not create local workflow ledgers.
