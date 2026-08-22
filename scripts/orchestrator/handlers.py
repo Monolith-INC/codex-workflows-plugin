@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -98,9 +98,10 @@ def handle_review_pr(invocation: Invocation) -> HandlerResult:
     return HandlerResult(product={"pr_number": invocation.arguments["pr_number"], "mode": "instructions", "instructions": invocation.instructions})
 
 
-def _feature_plan(arguments: dict[str, Any], *, mode: str) -> dict[str, Any]:
+def _feature_plan(arguments: Mapping[str, Any], *, mode: str) -> dict[str, Any]:
     feature_ref = str(arguments.get("feature_ref") or arguments.get("ticket_id") or arguments.get("ref") or "")
-    children = arguments.get("children") if isinstance(arguments.get("children"), list) else []
+    raw_children = arguments.get("children")
+    children = raw_children if isinstance(raw_children, list) else []
     summarized = []
     for child in children:
         if not isinstance(child, dict):
