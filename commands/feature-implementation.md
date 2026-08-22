@@ -1,14 +1,8 @@
 ---
 name: feature-implementation
-description: Plan and implement an Active Feature using stacked Feature and User Story branches.
+description: Start stacked feature/story implementation through tracker and SCM adapters
 ---
 
-# feature-implementation
+# Feature Implementation
 
-Plan and drive implementation of an Active Feature with a two-tier stacked branch workflow.
-
-Follow `skills/feature-implementation/SKILL.md`.
-
-Usage: `/feature-implementation <feature_id>`
-
-Example: `/feature-implementation F-2041`
+Follow `skills/feature-implementation/SKILL.md`. Fetch the feature and user stories through the tracker adapter, publish the implementation plan, and use the SCM adapter for feature and story branches.

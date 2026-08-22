@@ -1,17 +1,17 @@
 {
   "name": "codex-workflows-plugin",
   "version": "0.5.21",
-  "description": "Provider-neutral workflow orchestration with adapter-backed tracker and SCM integrations",
+  "description": "Provider-neutral work-item workflows with adapter-backed tracker/SCM integrations and fail-closed hooks",
   "author": {
-    "name": "agentrick"
+    "name": "Monolith-INC"
   },
   "skills": "./skills/",
   "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "Codex Workflows",
     "shortDescription": "Adapter-backed work-item workflows",
-    "longDescription": "A client-adaptive plugin for generic work-item workflows, adapter-backed artifacts, and enforced branch and completion hooks.",
-    "developerName": "agentrick",
+    "longDescription": "Provider-neutral work-item workflows with adapter-backed tracker/SCM integrations and fail-closed hooks",
+    "developerName": "Monolith-INC",
     "category": "Productivity",
     "capabilities": [
       "Interactive",

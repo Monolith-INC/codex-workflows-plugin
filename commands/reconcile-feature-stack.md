@@ -1,14 +1,8 @@
 ---
 name: reconcile-feature-stack
-description: Plan and implement an Active Feature using stacked Feature and User Story branches.
+description: Reconcile stacked story branches/PRs onto the feature branch in order
 ---
 
-# reconcile-feature-stack
+# Reconcile Feature Stack
 
-Plan and drive implementation of an Active Feature with a two-tier stacked branch workflow.
-
-Follow `skills/reconcile-feature-stack/SKILL.md`.
-
-Usage: `/reconcile-feature-stack <feature_id>`
-
-Example: `/reconcile-feature-stack F-2041`
+Follow `skills/reconcile-feature-stack/SKILL.md`. Inspect feature and story pull requests through the SCM adapter, merge or rebase ancestors into descendants in order, and publish reconciliation evidence to the tracker.

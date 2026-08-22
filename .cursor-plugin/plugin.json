@@ -2,9 +2,9 @@
   "name": "codex-workflows-plugin",
   "displayName": "Codex Workflows",
   "version": "0.5.21",
-  "description": "Client-adaptive workflow and enforcement plugin for Codex-style agent hosts",
+  "description": "Provider-neutral work-item workflows with adapter-backed tracker/SCM integrations and fail-closed hooks",
   "author": {
-    "name": "agentrick"
+    "name": "Monolith-INC"
   },
   "skills": "./skills/",
   "hooks": "./hooks/hooks-cursor.json",

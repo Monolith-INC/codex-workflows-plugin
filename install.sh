@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_SLUG="${CODEX_WORKFLOWS_REPO:-theocarranza/codex-workflows-plugin}"
+REPO_SLUG="${CODEX_WORKFLOWS_REPO:-Monolith-INC/codex-workflows-plugin}"
 TMP_DIR="$(mktemp -d)"
 
 cleanup() {
@@ -11,20 +11,23 @@ trap cleanup EXIT
 
 usage() {
   cat <<'EOF'
-Install codex-workflows-plugin into a project (local install only).
+Install codex-workflows-plugin into the application repo you want to govern (not this plugin clone).
 
-Interactive (recommended):
-  bash <(curl -fsSL https://github.com/theocarranza/codex-workflows-plugin/releases/latest/download/install.sh)
+Interactive (recommended) — run from your app repo, or confirm the path in the wizard:
+  bash <(curl -fsSL https://github.com/Monolith-INC/codex-workflows-plugin/releases/latest/download/install.sh)
 
 Non-interactive / CI:
-  curl -fsSL .../install.sh | bash -s -- --dest /path/to/project
-  curl -fsSL .../install.sh | bash -s -- --dest /path/to/project --target claude
-  curl -fsSL .../install.sh | bash -s -- --dest /path/to/project --uninstall
+  curl -fsSL https://github.com/Monolith-INC/codex-workflows-plugin/releases/latest/download/install.sh \
+    | bash -s -- --dest /absolute/path/to/your-app
+  curl -fsSL https://github.com/Monolith-INC/codex-workflows-plugin/releases/latest/download/install.sh \
+    | bash -s -- --dest /absolute/path/to/your-app --target claude
+  curl -fsSL https://github.com/Monolith-INC/codex-workflows-plugin/releases/latest/download/install.sh \
+    | bash -s -- --dest /absolute/path/to/your-app --uninstall
 
 Environment:
-  CODEX_WORKFLOWS_VERSION      Release tag to install, for example v0.5.7. Defaults to latest.
+  CODEX_WORKFLOWS_VERSION      Release tag to install, for example v0.5.21. Defaults to latest.
   CODEX_WORKFLOWS_RELEASE_ZIP  Local release zip path, used by tests or offline installs.
-  CODEX_WORKFLOWS_REPO         GitHub repo slug. Defaults to theocarranza/codex-workflows-plugin.
+  CODEX_WORKFLOWS_REPO         GitHub repo slug. Defaults to Monolith-INC/codex-workflows-plugin.
 EOF
 }
 

@@ -630,7 +630,8 @@ def _no_tty_error(cwd: Path | None) -> int:
     print(
         "error: no interactive terminal available.\n"
         "Open a real terminal (or use an IDE terminal that allocates a TTY), or pass --dest:\n"
-        f"  curl -fsSL .../install.sh | bash -s -- --dest {dest}",
+        "  curl -fsSL https://github.com/Monolith-INC/codex-workflows-plugin/releases/latest/download/install.sh "
+        f"| bash -s -- --dest {dest}",
         file=sys.stderr,
     )
     looks_like, markers = detect_software_project(dest)
