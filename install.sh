@@ -25,7 +25,7 @@ Non-interactive / CI:
     | bash -s -- --dest /absolute/path/to/your-app --uninstall
 
 Environment:
-  CODEX_WORKFLOWS_VERSION      Release tag to install, for example v0.5.22. Defaults to latest.
+  CODEX_WORKFLOWS_VERSION      Release tag to install, for example v0.5.23. Defaults to latest.
   CODEX_WORKFLOWS_RELEASE_ZIP  Local release zip path, used by tests or offline installs.
   CODEX_WORKFLOWS_REPO         GitHub repo slug. Defaults to Monolith-INC/codex-workflows-plugin.
 EOF

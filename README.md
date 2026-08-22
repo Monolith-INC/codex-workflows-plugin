@@ -38,7 +38,7 @@ curl -fsSL https://github.com/Monolith-INC/codex-workflows-plugin/releases/lates
 
 Optional flags: `--target claude|cursor|codex|all-agents`, `--uninstall`.
 
-Pin a release with `CODEX_WORKFLOWS_VERSION=v0.5.22`. Offline installs can set `CODEX_WORKFLOWS_RELEASE_ZIP=/path/to/codex-workflows-plugin-*.zip`.
+Pin a release with `CODEX_WORKFLOWS_VERSION=v0.5.23`. Offline installs can set `CODEX_WORKFLOWS_RELEASE_ZIP=/path/to/codex-workflows-plugin-*.zip`.
 
 ### Requirements
 
