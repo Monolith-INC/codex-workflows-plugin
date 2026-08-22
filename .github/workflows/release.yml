@@ -51,4 +51,12 @@ jobs:
             ls -la dist/
             exit 1
           fi
-          gh release upload "$TAG" "$ZIP" install.sh --clobber
+          awk "/^## ${VERSION}\$/ { capture=1; next } /^## / && capture { exit } capture { print }" CHANGELOG.md > RELEASE_NOTES.md
+          if [[ ! -s RELEASE_NOTES.md ]]; then
+            echo "Release ${TAG}" > RELEASE_NOTES.md
+          fi
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$ZIP" install.sh --clobber
+          else
+            gh release create "$TAG" "$ZIP" install.sh --title "$TAG" --notes-file RELEASE_NOTES.md --verify-tag
+          fi
