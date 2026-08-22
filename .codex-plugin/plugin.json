@@ -1,6 +1,6 @@
 {
   "name": "codex-workflows-plugin",
-  "version": "0.5.21",
+  "version": "0.5.22",
   "description": "Provider-neutral work-item workflows with adapter-backed tracker/SCM integrations and fail-closed hooks",
   "author": {
     "name": "Monolith-INC"
