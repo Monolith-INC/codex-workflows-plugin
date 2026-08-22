@@ -17,14 +17,22 @@ def _require_ground_truth_specs(text: str, context: ArtifactContext) -> list[str
     critiques: list[str] = []
     specs = context.ground_truth.get("spec_artifacts", [])
     if not specs:
-        critiques.append("No spec files found for this ticket — write-spec must run before resolve-ticket.")
+        critiques.append(
+            "No spec files found for this ticket — write-spec must run before resolve-ticket."
+        )
         return critiques
 
     spec_names = [name.removesuffix(".md") for name in specs]
-    missing_refs = [name for name in spec_names if name.replace("-", " ") not in text.lower() and name not in text.lower()]
+    missing_refs = [
+        name
+        for name in spec_names
+        if name.replace("-", " ") not in text.lower() and name not in text.lower()
+    ]
     if missing_refs:
         critiques.append(
-            "Resolution report must reference each spec file: " + ", ".join(missing_refs) + "."
+            "Resolution report must reference each spec file: "
+            + ", ".join(missing_refs)
+            + "."
         )
     return critiques
 
@@ -33,10 +41,14 @@ def _require_implementation_evidence(text: str, context: ArtifactContext) -> lis
     critiques: list[str] = []
     summary = str(context.ground_truth.get("implementation_summary", "")).strip()
     if summary and summary.lower() not in text.lower() and len(summary) > 40:
-        critiques.append("Implementation summary supplied by the work item is not reflected in the resolution report.")
+        critiques.append(
+            "Implementation summary supplied by the work item is not reflected in the resolution report."
+        )
 
     if not re.search(r"(?im)(commit|pr|pull request|file|module|test)", text):
-        critiques.append("Implementation Summary must cite concrete evidence (files, commits, PR, or tests).")
+        critiques.append(
+            "Implementation Summary must cite concrete evidence (files, commits, PR, or tests)."
+        )
     return critiques
 
 
@@ -50,7 +62,9 @@ def _map_requirements_to_specs(text: str, context: ArtifactContext) -> list[str]
     requirements = str(context.ground_truth.get("requirements", "")).strip()
     if not requirements:
         return []
-    if not re.search(r"(?im)(requirement|acceptance|satisfied|deferred|out of scope)", text):
+    if not re.search(
+        r"(?im)(requirement|acceptance|satisfied|deferred|out of scope)", text
+    ):
         return ["Spec Coverage must map requirements to satisfied/deferred outcomes."]
     return []
 

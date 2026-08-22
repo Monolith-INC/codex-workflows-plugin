@@ -1,4 +1,6 @@
+import tempfile
 import unittest
+from pathlib import Path
 from typing import Any
 
 from scripts.integrations.adapters import (
@@ -7,7 +9,13 @@ from scripts.integrations.adapters import (
     GitHubScmAdapter,
     LinearTrackerAdapter,
 )
-from scripts.integrations.contracts import ArtifactRef, IntegrationError, LogicalState, WorkItemKind
+from scripts.integrations.contracts import (
+    ArtifactRef,
+    IntegrationError,
+    LogicalState,
+    WorkItemKind,
+)
+from scripts.integrations.local_tracker import LocalTrackerAdapter
 from scripts.integrations.publish import publish_artifact_idempotent
 
 
@@ -42,7 +50,13 @@ def _linear_config(client: FakeClient) -> dict[str, Any]:
                 "link_development_artifact": "create_comment",
             },
             "mappings": {
-                "kinds": {"feature": "Feature", "user_story": "Story", "task": "Task", "bug": "Bug", "epic": "Epic"},
+                "kinds": {
+                    "feature": "Feature",
+                    "user_story": "Story",
+                    "task": "Task",
+                    "bug": "Bug",
+                    "epic": "Epic",
+                },
                 "states": {
                     "backlog": "Backlog",
                     "ready": "Todo",
@@ -58,6 +72,56 @@ def _linear_config(client: FakeClient) -> dict[str, Any]:
 
 
 class AdapterContractTests(unittest.TestCase):
+    def test_local_tracker_persists_hierarchy_transitions_and_artifacts(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            adapter = LocalTrackerAdapter(
+                {
+                    "adapter": "local_tracker",
+                    "projectRoot": str(root),
+                    "root": ".local-tracker",
+                }
+            )
+            epic = adapter.create_work_item("epic", "Quality gates", "Outcome")
+            feature = adapter.create_work_item(
+                "feature", "Local tracker", "Scope", epic.key
+            )
+            story = adapter.create_work_item(
+                "user_story", "Use local records", "Story", feature.key
+            )
+            task = adapter.create_work_item(
+                "task", "Persist records", "Task", story.key
+            )
+
+            self.assertEqual(epic.key, "EPIC-0001")
+            self.assertEqual(
+                [item.key for item in adapter.list_children(epic.key)], [feature.key]
+            )
+            with self.assertRaises(IntegrationError) as raised:
+                adapter.create_work_item("task", "Invalid child", "", feature.key)
+            self.assertEqual(raised.exception.code, "invalid_hierarchy")
+
+            moved = adapter.transition_work_item(task.key, "in_progress")
+            self.assertEqual(moved.state, LogicalState.IN_PROGRESS)
+            self.assertTrue(
+                (root / ".local-tracker" / "in_progress" / f"{task.key}.json").is_file()
+            )
+            artifact = adapter.publish_artifact(
+                task.key, "spec", "Implementation plan", "# Plan", "1"
+            )
+            self.assertEqual(artifact.outcome, "created")
+            self.assertEqual(
+                adapter.publish_artifact(
+                    task.key, "spec", "Implementation plan", "# Plan", "1"
+                ).outcome,
+                "reused",
+            )
+            link = adapter.link_development_artifact(
+                task.key, "https://example.test/pr/1"
+            )
+            self.assertTrue(link["linked"])
+            self.assertEqual(len(adapter.list_artifacts(task.key)), 1)
+
     def test_linear_get_transition_children_and_publish(self):
         client = FakeClient(
             {
@@ -77,12 +141,31 @@ class AdapterContractTests(unittest.TestCase):
                 },
                 "list_issues": {
                     "items": [
-                        {"id": "ENG-2", "identifier": "ENG-2", "title": "Story", "kind": "Story", "state": "Todo", "parentId": "ENG-1"},
-                        {"id": "ENG-9", "identifier": "ENG-9", "title": "Other", "kind": "Story", "state": "Todo", "parentId": "ENG-8"},
+                        {
+                            "id": "ENG-2",
+                            "identifier": "ENG-2",
+                            "title": "Story",
+                            "kind": "Story",
+                            "state": "Todo",
+                            "parentId": "ENG-1",
+                        },
+                        {
+                            "id": "ENG-9",
+                            "identifier": "ENG-9",
+                            "title": "Other",
+                            "kind": "Story",
+                            "state": "Todo",
+                            "parentId": "ENG-8",
+                        },
                     ]
                 },
                 "list_comments": {"items": []},
-                "create_comment": {"id": "c1", "kind": "spec", "title": "Spec", "revision": "1"},
+                "create_comment": {
+                    "id": "c1",
+                    "kind": "spec",
+                    "title": "Spec",
+                    "revision": "1",
+                },
             }
         )
         adapter = _linear_config(client)
@@ -106,7 +189,13 @@ class AdapterContractTests(unittest.TestCase):
             {
                 "wit_get_work_items": {
                     "items": [
-                        {"id": 2, "title": "Story", "type": "User Story", "state": "Approved", "parentId": 1},
+                        {
+                            "id": 2,
+                            "title": "Story",
+                            "type": "User Story",
+                            "state": "Approved",
+                            "parentId": 1,
+                        },
                     ]
                 }
             }
@@ -117,8 +206,20 @@ class AdapterContractTests(unittest.TestCase):
                 "connection": {"command": "true", "args": []},
                 "bindings": {"list_children": "wit_get_work_items"},
                 "mappings": {
-                    "kinds": {"user_story": "User Story", "feature": "Feature", "task": "Task", "bug": "Bug", "epic": "Epic"},
-                    "states": {"ready": "Approved", "backlog": "New", "in_progress": "Active", "done": "Closed", "canceled": "Removed"},
+                    "kinds": {
+                        "user_story": "User Story",
+                        "feature": "Feature",
+                        "task": "Task",
+                        "bug": "Bug",
+                        "epic": "Epic",
+                    },
+                    "states": {
+                        "ready": "Approved",
+                        "backlog": "New",
+                        "in_progress": "Active",
+                        "done": "Closed",
+                        "canceled": "Removed",
+                    },
                 },
             }
         )
@@ -147,7 +248,9 @@ class AdapterContractTests(unittest.TestCase):
                     "target": "main",
                     "state": "active",
                 },
-                "repo_list_pull_request_threads": {"items": [{"id": "t1", "comment": "nit", "status": "active"}]},
+                "repo_list_pull_request_threads": {
+                    "items": [{"id": "t1", "comment": "nit", "status": "active"}]
+                },
                 "repo_reply_to_comment": {"ok": True},
                 "wit_link_work_item_to_pull_request": {"linked": True},
             }
@@ -178,7 +281,15 @@ class AdapterContractTests(unittest.TestCase):
         self.assertEqual(adapter.link_work_item("7", "42")["linked"], True)
 
     def test_github_adapter_uses_injected_runner(self):
-        adapter = GitHubScmAdapter({"adapter": "github", "owner": "o", "repo": "r", "connection": {"command": "true", "args": []}, "bindings": {}})
+        adapter = GitHubScmAdapter(
+            {
+                "adapter": "github",
+                "owner": "o",
+                "repo": "r",
+                "connection": {"command": "true", "args": []},
+                "bindings": {},
+            }
+        )
 
         def fake_run(args: list[str]) -> Any:
             if args[:2] == ["pr", "view"]:
@@ -199,7 +310,15 @@ class AdapterContractTests(unittest.TestCase):
         self.assertEqual(pr.target_branch, "main")
 
     def test_github_link_work_item_persists_body_marker(self):
-        adapter = GitHubScmAdapter({"adapter": "github", "owner": "o", "repo": "r", "connection": {"command": "true", "args": []}, "bindings": {}})
+        adapter = GitHubScmAdapter(
+            {
+                "adapter": "github",
+                "owner": "o",
+                "repo": "r",
+                "connection": {"command": "true", "args": []},
+                "bindings": {},
+            }
+        )
         edits: list[list[str]] = []
 
         def fake_run(args: list[str]) -> Any:
@@ -218,12 +337,12 @@ class AdapterContractTests(unittest.TestCase):
         self.assertEqual(edits[0][:2], ["pr", "edit"])
         self.assertIn("Work item: CW-1", edits[0][edits[0].index("--body") + 1])
 
-
-
     def test_comment_body_envelope_round_trip(self):
         from scripts.integrations.adapters import _artifact, _encode_artifact_envelope
 
-        body = _encode_artifact_envelope(kind="tech_spec", title="Spec", revision="3", content="# Body")
+        body = _encode_artifact_envelope(
+            kind="tech_spec", title="Spec", revision="3", content="# Body"
+        )
         artifact = _artifact({"id": "c1", "body": body})
         self.assertEqual(artifact.kind, "tech_spec")
         self.assertEqual(artifact.title, "Spec")
@@ -236,7 +355,13 @@ class AdapterContractTests(unittest.TestCase):
         class FakeClient:
             def call(self, tool, arguments):
                 calls.append((tool, arguments))
-                return {"id": "1", "identifier": "ABC-1", "title": arguments["title"], "kind": arguments["kind"], "state": "Backlog"}
+                return {
+                    "id": "1",
+                    "identifier": "ABC-1",
+                    "title": arguments["title"],
+                    "kind": arguments["kind"],
+                    "state": "Backlog",
+                }
 
         adapter = LinearTrackerAdapter(
             {
@@ -251,6 +376,7 @@ class AdapterContractTests(unittest.TestCase):
         self.assertEqual(calls[0][1]["kind"], "Feature")
         self.assertEqual(item.key, "ABC-1")
 
+
 class PublishHelperTests(unittest.TestCase):
     def test_reused_skips_create(self):
         calls = {"create": 0}
@@ -262,7 +388,9 @@ class PublishHelperTests(unittest.TestCase):
             calls["create"] += 1
             return ArtifactRef("2", "spec", "Spec", "1")
 
-        result = publish_artifact_idempotent(list_fn=list_fn, create_fn=create_fn, title="Spec", revision="1")
+        result = publish_artifact_idempotent(
+            list_fn=list_fn, create_fn=create_fn, title="Spec", revision="1"
+        )
         self.assertEqual(result["outcome"], "reused")
         self.assertEqual(calls["create"], 0)
 
@@ -299,10 +427,14 @@ class PublishHelperTests(unittest.TestCase):
             raise IntegrationError("provider_error", "boom", retryable=False)
 
         with self.assertRaises(IntegrationError):
-            publish_artifact_idempotent(list_fn=list_fn, create_fn=create_fn, title="Spec", revision="1", sleep_fn=lambda _: None)
+            publish_artifact_idempotent(
+                list_fn=list_fn,
+                create_fn=create_fn,
+                title="Spec",
+                revision="1",
+                sleep_fn=lambda _: None,
+            )
         self.assertEqual(attempts["n"], 1)
-
-
 
     def test_retryable_timeout_reliists_before_duplicate(self):
         attempts = {"n": 0}

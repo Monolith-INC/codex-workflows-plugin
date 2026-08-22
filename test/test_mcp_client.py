@@ -30,23 +30,37 @@ class StdioMcpClientTests(unittest.TestCase):
         def capture_send(proc, payload):
             sent.append(payload)
 
-        with patch("scripts.integrations.mcp_client.subprocess.Popen", return_value=process):
-            with patch.object(StdioMcpClient, "_send", side_effect=capture_send):
-                with patch("scripts.integrations.mcp_client.select.select", return_value=([process.stdout], [], [])):
-                    client.list_tools()
+        with (
+            patch(
+                "scripts.integrations.mcp_client.subprocess.Popen", return_value=process
+            ),
+            patch.object(StdioMcpClient, "_send", side_effect=capture_send),
+            patch(
+                "scripts.integrations.mcp_client.select.select",
+                return_value=([process.stdout], [], []),
+            ),
+        ):
+            client.list_tools()
 
         init = next(item for item in sent if item.get("method") == "initialize")
         self.assertEqual(init["params"]["protocolVersion"], "2024-11-05")
         self.assertIn("capabilities", init["params"])
-        self.assertEqual(init["params"]["clientInfo"]["name"], "codex-workflows-integrations")
+        self.assertEqual(
+            init["params"]["clientInfo"]["name"], "codex-workflows-integrations"
+        )
 
     def test_read_response_times_out_when_select_idle(self):
         client = StdioMcpClient("true", [], timeout=0.05)
         process = MagicMock()
         process.stdout = MagicMock()
-        with patch("scripts.integrations.mcp_client.select.select", return_value=([], [], [])):
-            with self.assertRaises(IntegrationError) as ctx:
-                client._read_response(process, 1)
+        with (
+            patch(
+                "scripts.integrations.mcp_client.select.select",
+                return_value=([], [], []),
+            ),
+            self.assertRaises(IntegrationError) as ctx,
+        ):
+            client._read_response(process, 1)
         self.assertEqual(ctx.exception.code, "provider_timeout")
 
 

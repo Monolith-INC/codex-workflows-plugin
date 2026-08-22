@@ -52,7 +52,9 @@ class TestInstallerTargets(unittest.TestCase):
         self.assertTrue(result.written_target_config)
         self.assertEqual(result.config_paths, (".agents/hooks.json",))
         self.assertEqual(
-            result.merged_config["codex-enforcer"]["PreToolUse"][0]["hooks"][0]["command"],
+            result.merged_config["codex-enforcer"]["PreToolUse"][0]["hooks"][0][
+                "command"
+            ],
             _expected_cmd("antigravity_enforce_hook.py"),
         )
 
@@ -62,7 +64,9 @@ class TestInstallerTargets(unittest.TestCase):
         self.assertFalse(result.written_codex_config)
         self.assertTrue(result.written_shared_assets)
         self.assertTrue(result.written_target_config)
-        self.assertEqual(result.config_paths, (".gemini/antigravity-cli/settings.json",))
+        self.assertEqual(
+            result.config_paths, (".gemini/antigravity-cli/settings.json",)
+        )
         self.assertEqual(
             result.merged_config["hooks"]["BeforeTool"][0]["hooks"][0]["command"],
             _expected_cmd("antigravity_enforce_hook.py"),
@@ -98,9 +102,7 @@ class TestInstallerTargets(unittest.TestCase):
                 "PreToolUse": [
                     {
                         "matcher": "^Bash$",
-                        "hooks": [
-                            {"type": "command", "command": "echo existing"}
-                        ],
+                        "hooks": [{"type": "command", "command": "echo existing"}],
                     }
                 ]
             }
@@ -110,9 +112,7 @@ class TestInstallerTargets(unittest.TestCase):
                 "PreToolUse": [
                     {
                         "matcher": "^(Bash|apply_patch)$",
-                        "hooks": [
-                            {"type": "command", "command": "echo incoming"}
-                        ],
+                        "hooks": [{"type": "command", "command": "echo incoming"}],
                     }
                 ]
             }

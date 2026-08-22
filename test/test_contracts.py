@@ -46,8 +46,13 @@ class TestTypeContract(unittest.TestCase):
         contract = parse(
             {"type": "object", "properties": {"note": {"type": ["string", "null"]}}}
         )
-        self.assertEqual(check_value({"note": "text"}, contract, ARGUMENT, not_object_message="x"), ())
-        self.assertEqual(check_value({"note": None}, contract, ARGUMENT, not_object_message="x"), ())
+        self.assertEqual(
+            check_value({"note": "text"}, contract, ARGUMENT, not_object_message="x"),
+            (),
+        )
+        self.assertEqual(
+            check_value({"note": None}, contract, ARGUMENT, not_object_message="x"), ()
+        )
         self.assertEqual(
             check_value({"note": 3}, contract, ARGUMENT, not_object_message="x"),
             ("Argument 'note' should be one of null, string, got int.",),
@@ -60,7 +65,9 @@ class TestTypeContract(unittest.TestCase):
     def test_an_unknown_type_name_is_a_diagnostic_not_a_crash(self):
         self.assertEqual(diagnostics({"type": "sting"}), ("unsupported_schema_type",))
         self.assertEqual(
-            diagnostics({"type": "object", "properties": {"a": {"type": ["string", "sting"]}}}),
+            diagnostics(
+                {"type": "object", "properties": {"a": {"type": ["string", "sting"]}}}
+            ),
             ("unsupported_property_type",),
         )
 
@@ -76,18 +83,20 @@ class TestExtraProperties(unittest.TestCase):
     def test_absent_and_true_both_parse_to_accept(self):
         self.assertEqual(parse({"type": "object"}).extras, AcceptExtras())
         self.assertEqual(
-            parse({"type": "object", "additionalProperties": True}).extras, AcceptExtras()
+            parse({"type": "object", "additionalProperties": True}).extras,
+            AcceptExtras(),
         )
 
     def test_false_parses_to_reject(self):
         self.assertEqual(
-            parse({"type": "object", "additionalProperties": False}).extras, RejectExtras()
+            parse({"type": "object", "additionalProperties": False}).extras,
+            RejectExtras(),
         )
 
-    def test_a_subschema_parses_to_a_constraint_instead_of_dropping_the_capability(self):
-        contract = parse(
-            {"type": "object", "additionalProperties": {"type": "string"}}
-        )
+    def test_a_subschema_parses_to_a_constraint_instead_of_dropping_the_capability(
+        self,
+    ):
+        contract = parse({"type": "object", "additionalProperties": {"type": "string"}})
         self.assertEqual(
             contract.extras, ConstrainExtras(OneOfTypes(frozenset({JsonType.STRING})))
         )
@@ -114,7 +123,11 @@ class TestProgressSignature(unittest.TestCase):
 
     def test_a_declared_contract_narrows_to_its_own_fields(self):
         contract = parse(
-            {"type": "object", "required": ["mode"], "properties": {"mode": {"type": "string"}}}
+            {
+                "type": "object",
+                "required": ["mode"],
+                "properties": {"mode": {"type": "string"}},
+            }
         )
         signature = progress_signature(
             {"mode": "instructions", "incidental": [1, 2, 3]}, contract
@@ -122,17 +135,15 @@ class TestProgressSignature(unittest.TestCase):
         self.assertEqual(signature, DeclaredFields({"mode": "instructions"}))
 
     def test_an_undeclared_field_cannot_masquerade_as_progress(self):
-        contract = parse(
-            {"type": "object", "properties": {"mode": {"type": "string"}}}
-        )
+        contract = parse({"type": "object", "properties": {"mode": {"type": "string"}}})
         first = progress_signature({"mode": "instructions", "log": ["a"]}, contract)
-        second = progress_signature({"mode": "instructions", "log": ["a", "b"]}, contract)
+        second = progress_signature(
+            {"mode": "instructions", "log": ["a", "b"]}, contract
+        )
         self.assertEqual(first, second)
 
     def test_a_declared_field_still_registers_as_progress(self):
-        contract = parse(
-            {"type": "object", "properties": {"mode": {"type": "string"}}}
-        )
+        contract = parse({"type": "object", "properties": {"mode": {"type": "string"}}})
         first = progress_signature({"mode": "drafting"}, contract)
         second = progress_signature({"mode": "completed"}, contract)
         self.assertNotEqual(first, second)
@@ -181,7 +192,9 @@ class TestProgressSignature(unittest.TestCase):
 class TestCheckValue(unittest.TestCase):
     def test_an_unconstrained_contract_accepts_anything(self):
         self.assertEqual(
-            check_value("not an object", Unconstrained(), ARGUMENT, not_object_message="x"),
+            check_value(
+                "not an object", Unconstrained(), ARGUMENT, not_object_message="x"
+            ),
             (),
         )
 

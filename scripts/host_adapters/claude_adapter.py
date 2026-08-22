@@ -5,10 +5,24 @@ from typing import Any
 from policy.events import CanonicalToolEvent, PolicyDecision
 
 
-def parse_claude_payload(payload: dict[str, Any], *, project_root: str, **_ignored: Any) -> CanonicalToolEvent:
+def parse_claude_payload(
+    payload: dict[str, Any], *, project_root: str, **_ignored: Any
+) -> CanonicalToolEvent:
     tool_call = payload.get("toolCall") or payload.get("tool_call") or {}
-    tool_input = tool_call.get("args") or tool_call.get("input") or payload.get("tool_input") or payload.get("arguments") or {}
-    tool_name = tool_call.get("name") or payload.get("tool_name") or payload.get("tool") or payload.get("name") or ""
+    tool_input = (
+        tool_call.get("args")
+        or tool_call.get("input")
+        or payload.get("tool_input")
+        or payload.get("arguments")
+        or {}
+    )
+    tool_name = (
+        tool_call.get("name")
+        or payload.get("tool_name")
+        or payload.get("tool")
+        or payload.get("name")
+        or ""
+    )
     command = tool_input.get("CommandLine") or tool_input.get("command")
     file_path = (
         tool_input.get("AbsolutePath")

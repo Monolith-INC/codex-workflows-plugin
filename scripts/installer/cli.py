@@ -39,7 +39,9 @@ def _hook_command(target: Target, plugin_root: Path) -> str:
         Target.CLAUDE: "claude_enforce_hook.py",
         Target.CURSOR: "cursor_enforce_hook.py",
     }
-    script = plugin_root / "skills" / "codex_workflows" / "scripts" / script_names[target]
+    script = (
+        plugin_root / "skills" / "codex_workflows" / "scripts" / script_names[target]
+    )
     return f"python3 {script}"
 
 
@@ -78,7 +80,9 @@ def sync_shared_assets(dest_root: str | Path, plugin_root: Path | None = None) -
                 shutil.copytree(item, dst_dir / item.name, dirs_exist_ok=True)
 
 
-def sync_host_discovery_assets(dest_root: str | Path, plugin_root: Path | None = None) -> None:
+def sync_host_discovery_assets(
+    dest_root: str | Path, plugin_root: Path | None = None
+) -> None:
     """Sync skills/commands into project-local Claude and Antigravity discovery trees.
 
     Claude discovers ``.claude/skills/*/SKILL.md`` and ``.claude/commands/*.md``.
@@ -91,7 +95,10 @@ def sync_host_discovery_assets(dest_root: str | Path, plugin_root: Path | None =
         for skill_dir in skills_src.iterdir():
             if not skill_dir.is_dir():
                 continue
-            for target_root in (dest / ".claude" / "skills", dest / ".agents" / "skills"):
+            for target_root in (
+                dest / ".claude" / "skills",
+                dest / ".agents" / "skills",
+            ):
                 target = target_root / skill_dir.name
                 if target.exists():
                     shutil.rmtree(target)
@@ -287,8 +294,14 @@ def install(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Install Codex workflow assets for a specific client target.")
-    parser.add_argument("--target", default="codex", help="Target client: codex, gemini, antigravity, claude, cursor, universal, all-agents")
+    parser = argparse.ArgumentParser(
+        description="Install Codex workflow assets for a specific client target."
+    )
+    parser.add_argument(
+        "--target",
+        default="codex",
+        help="Target client: codex, gemini, antigravity, claude, cursor, universal, all-agents",
+    )
     parser.add_argument("--profile", default="generic", help="Installer profile name")
     parser.add_argument(
         "--output",
@@ -305,7 +318,9 @@ def main() -> int:
     if args.output and result.merged_config is not None:
         output_path = Path(args.output).expanduser()
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(json.dumps(result.merged_config, indent=2), encoding="utf-8")
+        output_path.write_text(
+            json.dumps(result.merged_config, indent=2), encoding="utf-8"
+        )
 
     print(
         json.dumps(

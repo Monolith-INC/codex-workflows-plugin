@@ -23,8 +23,18 @@ class FeatureHandlerTests(unittest.TestCase):
         args = {
             "feature_ref": "FEAT-1",
             "children": [
-                {"key": "US-1", "title": "One", "state": "in_progress", "missing_artifacts": ["spec"]},
-                {"key": "US-2", "title": "Two", "state": "done", "missing_artifacts": []},
+                {
+                    "key": "US-1",
+                    "title": "One",
+                    "state": "in_progress",
+                    "missing_artifacts": ["spec"],
+                },
+                {
+                    "key": "US-2",
+                    "title": "Two",
+                    "state": "done",
+                    "missing_artifacts": [],
+                },
             ],
         }
         for handler, skill in (
@@ -35,7 +45,9 @@ class FeatureHandlerTests(unittest.TestCase):
             result = handler(_invocation(skill, args))
             self.assertEqual(result.product["mode"], "instructions")
             self.assertEqual(result.product["plan"]["feature_ref"], "FEAT-1")
-            self.assertEqual(result.product["plan"]["ordered_story_keys"], ["US-1", "US-2"])
+            self.assertEqual(
+                result.product["plan"]["ordered_story_keys"], ["US-1", "US-2"]
+            )
             self.assertIs(get_handler(skill), handler)
 
 

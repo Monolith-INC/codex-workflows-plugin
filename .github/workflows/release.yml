@@ -21,11 +21,18 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Validate plugin
-        run: python3 scripts/validate_plugin.py .
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
 
-      - name: Run tests
-        run: python3 -m unittest discover -s test -t . -p 'test_*.py'
+      - name: Install quality tools
+        run: |
+          python3 -m pip install --quiet -r requirements-dev.txt
+          npm ci
+
+      - name: Run quality gates
+        run: python3 scripts/quality.py check
 
       - name: Build release archive
         run: |

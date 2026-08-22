@@ -5,8 +5,12 @@ __pycache__/
 
 # IDE and local configuration files
 .claude/
+.codex/
+.cursor/
 .gemini/
+.agents/
 .idea/
+.mcp.json
 .vscode/
 
 # Obsidian local settings
@@ -19,4 +23,5 @@ AI_Codex/Projects/.obsidian/
 dist/
 build/
 .mypy_cache/
+node_modules/
 .codex-workflows/

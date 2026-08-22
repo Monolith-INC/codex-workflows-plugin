@@ -1,8 +1,5 @@
 ---
 trigger: always_on
----
-
----
 title: "Effective Dart: Documentation"
 breadcrumb: Documentation
 description: Clear, helpful comments and documentation.
@@ -13,6 +10,8 @@ prevpage:
   url: /effective-dart/style
   title: Style
 ---
+
+# Effective Dart documentation
 
 <?code-excerpt path-base="misc/lib/effective_dart"?>
 
@@ -35,6 +34,7 @@ generated documentation.
 ### DO format comments like sentences
 
 <?code-excerpt "docs_good.dart (comments-like-sentences)"?>
+
 ```dart tag=good
 // Not if anything comes before it.
 if (_chunks.isNotEmpty) return false;
@@ -47,6 +47,7 @@ inline stuff, even TODOs. Even if it's a sentence fragment.
 ### DON'T use block comments for documentation
 
 <?code-excerpt "docs_good.dart (block-comments)"?>
+
 ```dart tag=good
 void greet(String name) {
   // Assume we have a valid name.
@@ -55,6 +56,7 @@ void greet(String name) {
 ```
 
 <?code-excerpt "docs_bad.dart (block-comments)"?>
+
 ```dart tag=bad
 void greet(String name) {
   /* Assume we have a valid name. */
@@ -67,9 +69,9 @@ of code, but all other comments should use `//`.
 
 ## Doc comments
 
-Doc comments are especially handy because [`dart doc`][] parses them 
-and generates [beautiful doc pages][docs] from them. 
-A doc comment is any comment that appears before a declaration 
+Doc comments are especially handy because [`dart doc`][] parses them
+and generates [beautiful doc pages][docs] from them.
+A doc comment is any comment that appears before a declaration
 and uses the special `///` syntax that `dart doc` looks for.
 
 [`dart doc`]: /tools/dart-doc
@@ -79,17 +81,19 @@ and uses the special `///` syntax that `dart doc` looks for.
 
 {% render 'linter-rule-mention.md', rules:'slash_for_doc_comments' %}
 
-Using a doc comment instead of a regular comment enables 
+Using a doc comment instead of a regular comment enables
 [`dart doc`][] to find it
 and generate documentation for it.
 
 <?code-excerpt "docs_good.dart (use-doc-comments)"?>
+
 ```dart tag=good
 /// The number of characters in this chunk when unsplit.
 int get length => ...
 ```
 
 <?code-excerpt "docs_good.dart (use-doc-comments)" replace="/^\///g"?>
+
 ```dart tag=bad
 // The number of characters in this chunk when unsplit.
 int get length => ...
@@ -130,6 +134,7 @@ the `library` directive and any annotations that might be attached
 at the start of the file.
 
 <?code-excerpt "docs_good.dart (library-doc)"?>
+
 ```dart tag=good
 /// A really great test library.
 @TestOn('browser')
@@ -150,6 +155,7 @@ the reader to orient themselves and decide if they should keep reading or look
 elsewhere for the solution to their problem.
 
 <?code-excerpt "docs_good.dart (first-sentence)"?>
+
 ```dart tag=good
 /// Deletes the file at [path] from the file system.
 void delete(String path) {
@@ -158,6 +164,7 @@ void delete(String path) {
 ```
 
 <?code-excerpt "docs_bad.dart (first-sentence)"?>
+
 ```dart tag=bad
 /// Depending on the state of the file system and the user's permissions,
 /// certain operations may or may not be possible. If there is no file at
@@ -179,6 +186,7 @@ Also, tools like `dart doc` use the first paragraph as a short summary in places
 like lists of classes and members.
 
 <?code-excerpt "docs_good.dart (first-sentence-a-paragraph)"?>
+
 ```dart tag=good
 /// Deletes the file at [path].
 ///
@@ -190,6 +198,7 @@ void delete(String path) {
 ```
 
 <?code-excerpt "docs_bad.dart (first-sentence-a-paragraph)"?>
+
 ```dart tag=bad
 /// Deletes the file at [path]. Throws an [IOError] if the file could not
 /// be found. Throws a [PermissionError] if the file is present but could
@@ -208,6 +217,7 @@ spelled out in the doc comment. Instead, focus on explaining what the reader
 *doesn't* already know.
 
 <?code-excerpt "docs_good.dart (redundant)"?>
+
 ```dart tag=good
 class RadioButtonWidget extends Widget {
   /// Sets the tooltip to [lines].
@@ -220,6 +230,7 @@ class RadioButtonWidget extends Widget {
 ```
 
 <?code-excerpt "docs_bad.dart (redundant)"?>
+
 ```dart tag=bad
 class RadioButtonWidget extends Widget {
   /// Sets the tooltip for this radio button widget to the list of strings in
@@ -243,6 +254,7 @@ than waste a reader's time telling them something they already know.
 The doc comment should focus on what the code *does*.
 
 <?code-excerpt "docs_good.dart (third-person)"?>
+
 ```dart tag=good
 /// Connects to the server and fetches the query results.
 Stream<QueryResult> fetchResults(Query query) => ...
@@ -258,6 +270,7 @@ getters which may do calculation or other work. What the caller cares about is
 the *result* of that work, not the work itself.
 
 <?code-excerpt "docs_good.dart (noun-phrases-for-non-boolean-var-etc)"?>
+
 ```dart tag=good
 /// The current day of the week, where `0` is Sunday.
 int weekday;
@@ -273,6 +286,7 @@ This is true even for getters which may do calculation or other work.
 What the caller cares about is the *result* of that work, not the work itself.
 
 <?code-excerpt "docs_good.dart (noun-phrases-for-boolean-var-etc)"?>
+
 ```dart tag=good
 /// Whether the modal is currently displayed to the user.
 bool isVisible;
@@ -300,6 +314,7 @@ a phrase starting with "Whether" for such boolean functions,
 just as for a syntactic property or variable.
 
 <?code-excerpt "docs_good.dart (noun-for-func-returning-value)"?>
+
 ```dart tag=good
 /// The [index]th element of this iterable in iteration order.
 E elementAt(int index);
@@ -316,8 +331,8 @@ Sometimes a method has no side effects, and might
 conceptually be seen as a property, but is still
 simpler to name with a verb phrase like `list.take()`.
 Then a noun phrase should still be used to document it.
-_For example `Iterable.take` can be described as
-"The first \[count\] elements of ..."._
+*For example `Iterable.take` can be described as
+"The first \[count\] elements of ...".*
 :::
 
 [parameterized_property_name]: design#prefer-a-noun-phrase-or-non-imperative-verb-phrase-for-a-function-or-method-if-returning-a-value-is-its-primary-purpose
@@ -330,6 +345,7 @@ and if both the getter and the setter have doc comments, then
 `dart doc` discards the setter's doc comment.
 
 <?code-excerpt "docs_good.dart (getter-and-setter)"?>
+
 ```dart tag=good
 /// The pH level of the water in the pool.
 ///
@@ -339,6 +355,7 @@ set phLevel(int level) => ...
 ```
 
 <?code-excerpt "docs_bad.dart (getter-and-setter)"?>
+
 ```dart tag=bad
 /// The depth of the water in the pool, in meters.
 int get waterDepth => ...

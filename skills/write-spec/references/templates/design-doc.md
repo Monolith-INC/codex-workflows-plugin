@@ -33,4 +33,3 @@ Phases, metrics, alerts, rollback.
 ## Security
 
 AuthN/Z, secrets, compliance.
-

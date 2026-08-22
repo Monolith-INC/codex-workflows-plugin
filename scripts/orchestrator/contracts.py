@@ -39,10 +39,12 @@ class JsonType(Enum):
 _PREDICATES: Mapping[JsonType, Callable[[Any], bool]] = {
     JsonType.STRING: lambda value: isinstance(value, str),
     JsonType.BOOLEAN: lambda value: isinstance(value, bool),
-    JsonType.NUMBER: lambda value: isinstance(value, (int, float))
-    and not isinstance(value, bool),
-    JsonType.INTEGER: lambda value: isinstance(value, int)
-    and not isinstance(value, bool),
+    JsonType.NUMBER: lambda value: (
+        isinstance(value, (int, float)) and not isinstance(value, bool)
+    ),
+    JsonType.INTEGER: lambda value: (
+        isinstance(value, int) and not isinstance(value, bool)
+    ),
     JsonType.OBJECT: lambda value: isinstance(value, dict),
     JsonType.ARRAY: lambda value: isinstance(value, list),
     JsonType.NULL: lambda value: value is None,
@@ -335,7 +337,9 @@ def parse_value_contract(raw: Any, field_name: str) -> ParseResult:
         case _ as unmatched:
             assert_never(unmatched)
 
-    required, required_diagnostics = _parse_required(raw.get("required", []), field_name)
+    required, required_diagnostics = _parse_required(
+        raw.get("required", []), field_name
+    )
     properties, property_diagnostics = _parse_properties(
         raw.get("properties", {}), field_name
     )

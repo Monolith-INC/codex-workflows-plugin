@@ -119,5 +119,9 @@ def _reflection_attempt(arguments: dict[str, Any], task: Task) -> int:
     into ``arguments`` by rewriting the caller's payload on each retry.
     """
     declared = arguments.get("attempt", 0)
-    resumed = int(declared) if isinstance(declared, (int, float)) and not isinstance(declared, bool) else 0
+    resumed = (
+        int(declared)
+        if isinstance(declared, (int, float)) and not isinstance(declared, bool)
+        else 0
+    )
     return resumed + task.retry_count

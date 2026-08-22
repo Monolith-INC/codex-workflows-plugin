@@ -5,6 +5,7 @@ import os
 import select
 import subprocess
 import time
+from contextlib import suppress
 from typing import Any
 
 from .contracts import IntegrationError
@@ -54,10 +55,14 @@ class StdioMcpClient:
             raise IntegrationError("provider_error", str(error))
         result = response.get("result") or {}
         if result.get("isError"):
-            raise IntegrationError("provider_error", _content_text(result.get("content")))
+            raise IntegrationError(
+                "provider_error", _content_text(result.get("content"))
+            )
         return _decode_content(result.get("content"), result)
 
-    def _roundtrip(self, request: dict[str, Any], *, expected_id: int) -> dict[str, Any]:
+    def _roundtrip(
+        self, request: dict[str, Any], *, expected_id: int
+    ) -> dict[str, Any]:
         try:
             process = subprocess.Popen(
                 [self.command, *self.args],
@@ -68,7 +73,9 @@ class StdioMcpClient:
                 env=os.environ.copy(),
             )
         except OSError as exc:
-            raise IntegrationError("provider_unavailable", f"Could not start provider tool: {exc}") from exc
+            raise IntegrationError(
+                "provider_unavailable", f"Could not start provider tool: {exc}"
+            ) from exc
 
         try:
             self._send(
@@ -85,24 +92,31 @@ class StdioMcpClient:
                 },
             )
             self._read_response(process, 1)
-            self._send(process, {"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}})
+            self._send(
+                process,
+                {"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}},
+            )
             self._send(process, request)
             return self._read_response(process, expected_id)
         finally:
-            try:
+            with suppress(OSError):
                 process.kill()
-            except OSError:
-                pass
 
     def _send(self, process: subprocess.Popen[str], payload: dict[str, Any]) -> None:
         if process.stdin is None:
-            raise IntegrationError("provider_unavailable", "Provider stdin is unavailable.")
+            raise IntegrationError(
+                "provider_unavailable", "Provider stdin is unavailable."
+            )
         process.stdin.write(json.dumps(payload) + "\n")
         process.stdin.flush()
 
-    def _read_response(self, process: subprocess.Popen[str], expected_id: int) -> dict[str, Any]:
+    def _read_response(
+        self, process: subprocess.Popen[str], expected_id: int
+    ) -> dict[str, Any]:
         if process.stdout is None:
-            raise IntegrationError("provider_unavailable", "Provider stdout is unavailable.")
+            raise IntegrationError(
+                "provider_unavailable", "Provider stdout is unavailable."
+            )
         deadline = time.monotonic() + self.timeout
         while True:
             remaining = deadline - time.monotonic()
@@ -120,17 +134,25 @@ class StdioMcpClient:
                 continue
             if payload.get("id") == expected_id:
                 return payload
-        raise IntegrationError("provider_timeout", "Provider tool did not return a response in time.", retryable=True)
+        raise IntegrationError(
+            "provider_timeout",
+            "Provider tool did not return a response in time.",
+            retryable=True,
+        )
 
 
 def client_from_connection(connection: dict[str, Any]) -> StdioMcpClient:
     command = connection.get("command")
     args = connection.get("args", [])
     if not isinstance(command, str) or not command or not isinstance(args, list):
-        raise IntegrationError("invalid_config", "Provider connection requires command and args.")
+        raise IntegrationError(
+            "invalid_config", "Provider connection requires command and args."
+        )
     expanded_command = os.path.expandvars(command)
     expanded_args = [os.path.expandvars(str(item)) for item in args]
-    return StdioMcpClient(expanded_command, expanded_args, timeout=float(connection.get("timeout", 30)))
+    return StdioMcpClient(
+        expanded_command, expanded_args, timeout=float(connection.get("timeout", 30))
+    )
 
 
 def _decode_content(content: Any, fallback: Any) -> Any:
@@ -146,4 +168,8 @@ def _decode_content(content: Any, fallback: Any) -> Any:
 def _content_text(content: Any) -> str:
     if not isinstance(content, list):
         return ""
-    return "\n".join(str(item.get("text", "")) for item in content if isinstance(item, dict) and item.get("type") == "text")
+    return "\n".join(
+        str(item.get("text", ""))
+        for item in content
+        if isinstance(item, dict) and item.get("type") == "text"
+    )

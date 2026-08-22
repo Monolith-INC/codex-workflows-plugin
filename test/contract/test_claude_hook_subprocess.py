@@ -4,7 +4,13 @@ import sys
 import unittest
 from pathlib import Path
 
-HOOK_PATH = Path(__file__).resolve().parents[2] / "skills" / "codex_workflows" / "scripts" / "claude_enforce_hook.py"
+HOOK_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "skills"
+    / "codex_workflows"
+    / "scripts"
+    / "claude_enforce_hook.py"
+)
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -24,7 +30,9 @@ class TestClaudeHookSubprocess(unittest.TestCase):
         return stdout
 
     def test_bash_allow_emits_no_output(self):
-        stdout = self._run_hook({"tool_name": "Bash", "tool_input": {"command": "echo hi"}})
+        stdout = self._run_hook(
+            {"tool_name": "Bash", "tool_input": {"command": "echo hi"}}
+        )
 
         self.assertEqual(stdout, "")
 

@@ -8,9 +8,9 @@ literature: RFC/ADR/Design-Doc/Tech-Spec/ISO-29148
 
 ## Status
 
-Proposed 
+Proposed
 
- Accepted 
+ Accepted
 
  Deprecated
 
@@ -29,4 +29,3 @@ Positive, negative, and follow-up work.
 ## References
 
 Links to RFCs, design docs, or tickets.
-

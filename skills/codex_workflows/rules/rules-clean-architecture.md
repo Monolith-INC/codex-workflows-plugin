@@ -1,6 +1,7 @@
 # Clean Architecture & Feature-First Structure
 
 ## 1. Core Principles
+
 1. **Adhere strictly to Clean Architecture**. The application is divided into layers: Presentation, Domain, and Data.
 2. **Dependency Rule**: Dependencies ONLY point inwards.
    - **Domain** (Inner circle): Depends on NOTHING. Pure Dart code.
@@ -9,9 +10,11 @@
    - **Drivers/Frameworks**: The outermost layer (UI, DB, External APIs) depends on adapters in Data/Presentation.
 
 ## 2. Folder Structure (Feature-Based)
+
 Organize the codebase by **Feature**, not by Type. Every feature must be self-contained.
 
 **REQUIRED PATTERN**: `lib/features/<feature_name>/` containing:
+
 - **`domain/`**:
   - `entities/`: Pure business objects.
   - `repositories/`: Abstract interfaces (contracts) for data access.
@@ -26,6 +29,7 @@ Organize the codebase by **Feature**, not by Type. Every feature must be self-co
   - `providers/` or `blocs/`: State management (referencing UseCases).
 
 **Example**:
+
 ```text
 lib/features/authentication/
   ├── domain/
@@ -42,6 +46,7 @@ lib/features/authentication/
 ```
 
 ## 3. Strict Compliance Rules
+
 - **DO NOT** import `data` layers into `domain`.
 - **DO NOT** import `presentation` layers into `domain` or `data`.
 - **DO NOT** put business logic in Widgets. Use UseCases.

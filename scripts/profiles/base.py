@@ -20,18 +20,28 @@ class WorkspaceProfile:
 
 
 def _generic_profile() -> WorkspaceProfile:
-    return WorkspaceProfile("generic", "project", "configured", "main", "python3 -m unittest")
+    return WorkspaceProfile(
+        "generic", "project", "configured", "main", "python3 -m unittest"
+    )
 
 
 def _flutter_profile() -> WorkspaceProfile:
-    return WorkspaceProfile("flutter", "project", "configured", "develop", "flutter test")
+    return WorkspaceProfile(
+        "flutter", "project", "configured", "develop", "flutter test"
+    )
 
 
 def _repository_profile() -> WorkspaceProfile:
-    return WorkspaceProfile("repository", "project", "configured", "main", "python3 -m unittest")
+    return WorkspaceProfile(
+        "repository", "project", "configured", "main", "python3 -m unittest"
+    )
 
 
-_PROFILE_FACTORIES: dict[str, Callable[[], WorkspaceProfile]] = {"generic": _generic_profile, "flutter": _flutter_profile, "repository": _repository_profile}
+_PROFILE_FACTORIES: dict[str, Callable[[], WorkspaceProfile]] = {
+    "generic": _generic_profile,
+    "flutter": _flutter_profile,
+    "repository": _repository_profile,
+}
 
 
 def load_profile(name: str) -> WorkspaceProfile:

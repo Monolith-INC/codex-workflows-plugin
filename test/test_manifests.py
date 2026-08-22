@@ -36,7 +36,9 @@ class TestManifests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             skill_dir = Path(tmpdir) / "bad-skill"
             skill_dir.mkdir()
-            (skill_dir / "manifest.json").write_text(json.dumps(["not", "a", "dict"]), encoding="utf-8")
+            (skill_dir / "manifest.json").write_text(
+                json.dumps(["not", "a", "dict"]), encoding="utf-8"
+            )
 
             good_dir = Path(tmpdir) / "good-skill"
             good_dir.mkdir()
@@ -47,14 +49,18 @@ class TestManifests(unittest.TestCase):
 
             manifests = read_manifests(tmpdir)
             self.assertEqual(len(manifests), 1)
-            self.assertEqual(manifest_by_name(tmpdir)["good-skill"]["name"], "good-skill")
+            self.assertEqual(
+                manifest_by_name(tmpdir)["good-skill"]["name"], "good-skill"
+            )
 
     def test_malformed_schema_is_isolated_with_a_diagnostic(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             bad_dir = Path(tmpdir) / "bad-skill"
             bad_dir.mkdir()
             (bad_dir / "manifest.json").write_text(
-                json.dumps({"name": "bad-skill", "input_schema": ["not", "an", "object"]}),
+                json.dumps(
+                    {"name": "bad-skill", "input_schema": ["not", "an", "object"]}
+                ),
                 encoding="utf-8",
             )
 
@@ -66,8 +72,12 @@ class TestManifests(unittest.TestCase):
             )
 
             discovery = discover_manifests(tmpdir)
-            self.assertEqual([item.name for item in discovery.manifests], ["good-skill"])
-            self.assertEqual([item.code for item in discovery.diagnostics], ["schema_not_object"])
+            self.assertEqual(
+                [item.name for item in discovery.manifests], ["good-skill"]
+            )
+            self.assertEqual(
+                [item.code for item in discovery.diagnostics], ["schema_not_object"]
+            )
 
     def test_duplicate_names_are_all_rejected(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -133,7 +143,9 @@ class TestManifests(unittest.TestCase):
             )
 
             discovery = discover_manifests(tmpdir)
-            self.assertEqual([item.name for item in discovery.manifests], ["open-skill"])
+            self.assertEqual(
+                [item.name for item in discovery.manifests], ["open-skill"]
+            )
             self.assertEqual(discovery.diagnostics, ())
 
     def test_the_wire_form_still_serializes_to_the_manifest_on_disk(self):
@@ -153,7 +165,8 @@ class TestManifests(unittest.TestCase):
 
             manifest = capabilities_by_name(tmpdir)["wire-skill"]
             self.assertEqual(
-                json.dumps(manifest.wire, sort_keys=True), json.dumps(body, sort_keys=True)
+                json.dumps(manifest.wire, sort_keys=True),
+                json.dumps(body, sort_keys=True),
             )
 
     def test_the_wire_form_compares_equal_to_the_manifest_on_disk(self):
@@ -180,7 +193,11 @@ class TestManifests(unittest.TestCase):
     def test_the_compatibility_wrappers_still_return_manifest_bodies(self):
         """The accepted spec fixes these shapes; the typed API is separate."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            body = {"name": "dict-skill", "description": "still a dict", "version": "2.0.0"}
+            body = {
+                "name": "dict-skill",
+                "description": "still a dict",
+                "version": "2.0.0",
+            }
             skill_dir = Path(tmpdir) / "dict-skill"
             skill_dir.mkdir()
             (skill_dir / "manifest.json").write_text(json.dumps(body), encoding="utf-8")
@@ -194,7 +211,9 @@ class TestManifests(unittest.TestCase):
             self.assertIsInstance(keyed["dict-skill"], dict)
             self.assertEqual(keyed["dict-skill"], body)
 
-            self.assertEqual(capabilities_by_name(tmpdir)["dict-skill"].name, "dict-skill")
+            self.assertEqual(
+                capabilities_by_name(tmpdir)["dict-skill"].name, "dict-skill"
+            )
 
     def test_the_wrappers_feed_the_host_tool_adapters(self):
         """The shapes exist so host dialect projections keep accepting them."""
@@ -223,8 +242,14 @@ class TestManifests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             for name, schema in (
                 ("null-root", {"type": None}),
-                ("null-property", {"type": "object", "properties": {"a": {"type": None}}}),
-                ("null-extras", {"type": "object", "additionalProperties": {"type": None}}),
+                (
+                    "null-property",
+                    {"type": "object", "properties": {"a": {"type": None}}},
+                ),
+                (
+                    "null-extras",
+                    {"type": "object", "additionalProperties": {"type": None}},
+                ),
             ):
                 skill_dir = Path(tmpdir) / name
                 skill_dir.mkdir()
@@ -262,7 +287,9 @@ class TestManifests(unittest.TestCase):
             )
 
             discovery = discover_manifests(tmpdir)
-            self.assertEqual([item.name for item in discovery.manifests], ["loose-skill"])
+            self.assertEqual(
+                [item.name for item in discovery.manifests], ["loose-skill"]
+            )
             self.assertEqual(discovery.diagnostics, ())
 
     def test_invalid_nested_schema_shapes_are_reported(self):
@@ -287,7 +314,11 @@ class TestManifests(unittest.TestCase):
             codes = {item.code for item in discover_manifests(tmpdir).diagnostics}
             self.assertEqual(
                 codes,
-                {"invalid_required", "invalid_property_schema", "invalid_additional_properties"},
+                {
+                    "invalid_required",
+                    "invalid_property_schema",
+                    "invalid_additional_properties",
+                },
             )
 
 

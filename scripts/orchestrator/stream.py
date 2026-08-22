@@ -11,7 +11,9 @@ class OrchestratorStream:
     def __init__(self, initial_state: QueueState, *, max_retries: int = 3) -> None:
         self.state = initial_state
         self.max_retries = max_retries
-        self.listeners: list[Callable[[QueueState, Event, OrchestratorStream], None]] = []
+        self.listeners: list[
+            Callable[[QueueState, Event, OrchestratorStream], None]
+        ] = []
         self._queue: deque[Event] = deque()
         self._dispatching = False
 
@@ -31,7 +33,9 @@ class OrchestratorStream:
         try:
             while self._queue:
                 current_event = self._queue.popleft()
-                self.state = reduce_queue_state(self.state, current_event, self.max_retries)
+                self.state = reduce_queue_state(
+                    self.state, current_event, self.max_retries
+                )
                 for listener in list(self.listeners):
                     listener(self.state, current_event, self)
         finally:

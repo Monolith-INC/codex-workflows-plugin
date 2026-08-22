@@ -14,12 +14,17 @@ class TestInputSchema(unittest.TestCase):
                 "required": ["pr_number"],
             },
         }
-        self.assertEqual(validate_inputs({}, capability(manifest)), ["Missing required argument 'pr_number'."])
+        self.assertEqual(
+            validate_inputs({}, capability(manifest)),
+            ["Missing required argument 'pr_number'."],
+        )
         self.assertEqual(
             validate_inputs({"pr_number": 42}, capability(manifest)),
             ["Argument 'pr_number' should be string, got int."],
         )
-        self.assertEqual(validate_inputs({"pr_number": "693"}, capability(manifest)), [])
+        self.assertEqual(
+            validate_inputs({"pr_number": "693"}, capability(manifest)), []
+        )
 
     def test_unknown_arguments_remain_allowed_by_default(self):
         manifest = {

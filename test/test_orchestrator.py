@@ -15,26 +15,38 @@ class TestOrchestratorReducers(unittest.TestCase):
     def setUp(self):
         self.initial_tasks = {
             "task_a": Task(id="task_a", skill_name="parse_ast", state=TaskState.READY),
-            "task_b": Task(id="task_b", skill_name="write_test", state=TaskState.BLOCKED, dependencies=["task_a"])
+            "task_b": Task(
+                id="task_b",
+                skill_name="write_test",
+                state=TaskState.BLOCKED,
+                dependencies=["task_a"],
+            ),
         }
         self.initial_state = QueueState(tasks=self.initial_tasks)
 
     def test_queue_resolution_on_completion(self):
         state = self.initial_state
-        
+
         # 1. Spawn Task A
         event_spawn = Event(type="TaskSpawnedEvent", payload={"task_id": "task_a"})
         state = reduce_queue_state(state, event_spawn)
         self.assertEqual(state.tasks["task_a"].state, TaskState.IN_PROGRESS)
         self.assertEqual(state.tasks["task_b"].state, TaskState.BLOCKED)
-        
+
         # 2. Complete Task A -> Should unblock Task B
-        event_complete = Event(type="TaskCompletedEvent", payload={"task_id": "task_a", "output": "AST parsed"})
+        event_complete = Event(
+            type="TaskCompletedEvent",
+            payload={"task_id": "task_a", "output": "AST parsed"},
+        )
         state = reduce_queue_state(state, event_complete)
-        
+
         self.assertEqual(state.tasks["task_a"].state, TaskState.COMPLETED)
         self.assertEqual(state.tasks["task_a"].output, "AST parsed")
-        self.assertEqual(state.tasks["task_b"].state, TaskState.READY, "Task B should be unblocked and READY")
+        self.assertEqual(
+            state.tasks["task_b"].state,
+            TaskState.READY,
+            "Task B should be unblocked and READY",
+        )
 
     def test_circuit_breaker_and_reflection_loop(self):
         state = self.initial_state
@@ -66,21 +78,38 @@ class TestOrchestratorReducers(unittest.TestCase):
                 ),
             )
 
-        self.assertEqual(state.tasks["task_a"].state, TaskState.BLOCKED_REQUIRES_REVIEW, "Circuit breaker should block task")
+        self.assertEqual(
+            state.tasks["task_a"].state,
+            TaskState.BLOCKED_REQUIRES_REVIEW,
+            "Circuit breaker should block task",
+        )
         self.assertEqual(state.tasks["task_a"].retry_count, 3)
 
         # Authorize Task A after manual review / instruction update
-        event_auth = Event(type="AuthorizationReceivedEvent", payload={"task_id": "task_a", "token": "IMPLEMENTATION APPROVED"})
+        event_auth = Event(
+            type="AuthorizationReceivedEvent",
+            payload={"task_id": "task_a", "token": "IMPLEMENTATION APPROVED"},
+        )
         state = reduce_queue_state(state, event_auth)
 
-        self.assertEqual(state.tasks["task_a"].state, TaskState.READY, "Task should be READY after authorization")
-        self.assertEqual(state.tasks["task_a"].retry_count, 0, "Retries should be reset")
-        self.assertEqual(len(state.tasks["task_a"].critiques), 0, "Critiques should be cleared")
+        self.assertEqual(
+            state.tasks["task_a"].state,
+            TaskState.READY,
+            "Task should be READY after authorization",
+        )
+        self.assertEqual(
+            state.tasks["task_a"].retry_count, 0, "Retries should be reset"
+        )
+        self.assertEqual(
+            len(state.tasks["task_a"].critiques), 0, "Critiques should be cleared"
+        )
 
     def test_missing_dependency_does_not_crash_completion(self):
         state = QueueState(
             tasks={
-                "task_a": Task(id="task_a", skill_name="parse_ast", state=TaskState.IN_PROGRESS),
+                "task_a": Task(
+                    id="task_a", skill_name="parse_ast", state=TaskState.IN_PROGRESS
+                ),
                 "task_b": Task(
                     id="task_b",
                     skill_name="write_test",
@@ -89,18 +118,26 @@ class TestOrchestratorReducers(unittest.TestCase):
                 ),
             }
         )
-        event_complete = Event(type="TaskCompletedEvent", payload={"task_id": "task_a", "output": "done"})
+        event_complete = Event(
+            type="TaskCompletedEvent", payload={"task_id": "task_a", "output": "done"}
+        )
         state = reduce_queue_state(state, event_complete)
         self.assertEqual(state.tasks["task_b"].state, TaskState.BLOCKED)
 
     def test_unrelated_completion_does_not_unblock_dependency_free_task(self):
         state = QueueState(
             tasks={
-                "task_a": Task(id="task_a", skill_name="parse_ast", state=TaskState.IN_PROGRESS),
-                "held": Task(id="held", skill_name="write_test", state=TaskState.BLOCKED),
+                "task_a": Task(
+                    id="task_a", skill_name="parse_ast", state=TaskState.IN_PROGRESS
+                ),
+                "held": Task(
+                    id="held", skill_name="write_test", state=TaskState.BLOCKED
+                ),
             }
         )
-        event_complete = Event(type="TaskCompletedEvent", payload={"task_id": "task_a", "output": "done"})
+        event_complete = Event(
+            type="TaskCompletedEvent", payload={"task_id": "task_a", "output": "done"}
+        )
         state = reduce_queue_state(state, event_complete)
         self.assertEqual(
             state.tasks["held"].state,
@@ -111,8 +148,12 @@ class TestOrchestratorReducers(unittest.TestCase):
     def test_completion_only_unblocks_its_own_dependents(self):
         state = QueueState(
             tasks={
-                "task_a": Task(id="task_a", skill_name="parse_ast", state=TaskState.IN_PROGRESS),
-                "task_b": Task(id="task_b", skill_name="other", state=TaskState.COMPLETED),
+                "task_a": Task(
+                    id="task_a", skill_name="parse_ast", state=TaskState.IN_PROGRESS
+                ),
+                "task_b": Task(
+                    id="task_b", skill_name="other", state=TaskState.COMPLETED
+                ),
                 "dependent": Task(
                     id="dependent",
                     skill_name="write_test",
@@ -121,7 +162,9 @@ class TestOrchestratorReducers(unittest.TestCase):
                 ),
             }
         )
-        event_complete = Event(type="TaskCompletedEvent", payload={"task_id": "task_a", "output": "done"})
+        event_complete = Event(
+            type="TaskCompletedEvent", payload={"task_id": "task_a", "output": "done"}
+        )
         state = reduce_queue_state(state, event_complete)
         self.assertEqual(
             state.tasks["dependent"].state,
@@ -186,7 +229,8 @@ class TestOrchestratorReducers(unittest.TestCase):
             tasks={"task": Task(id="task", skill_name="demo", state=TaskState.READY)}
         )
         event = Event(
-            type="TaskCompletedEvent", payload={"task_id": "task", "output": "too early"}
+            type="TaskCompletedEvent",
+            payload={"task_id": "task", "output": "too early"},
         )
 
         after = reduce_queue_state(state, event)
@@ -202,5 +246,6 @@ class TestOrchestratorReducers(unittest.TestCase):
             state = reduce_queue_state(state, event)
         self.assertEqual(state.events_history, tuple(events))
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()

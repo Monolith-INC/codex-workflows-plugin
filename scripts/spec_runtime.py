@@ -6,8 +6,14 @@ from pathlib import Path
 from typing import Any
 
 SPEC_KINDS = (
-    "rfc", "adr", "design-doc", "tech-spec", "srs", "implementation-plan",
-    "bugfix-spec", "api-contract",
+    "rfc",
+    "adr",
+    "design-doc",
+    "tech-spec",
+    "srs",
+    "implementation-plan",
+    "bugfix-spec",
+    "api-contract",
 )
 DEFAULT_KINDS_BY_SIGNAL = {
     "bugfix": ("bugfix-spec", "adr"),
@@ -62,7 +68,9 @@ def kinds_for_signal(signal: str) -> tuple[str, ...]:
     return DEFAULT_KINDS_BY_SIGNAL.get(signal, DEFAULT_KINDS_BY_SIGNAL["default"])
 
 
-def missing_spec_kinds(existing_artifacts: list[str] | tuple[str, ...], desired_kinds: tuple[str, ...]) -> list[str]:
+def missing_spec_kinds(
+    existing_artifacts: list[str] | tuple[str, ...], desired_kinds: tuple[str, ...]
+) -> list[str]:
     existing = {str(name).removesuffix(".md").lower() for name in existing_artifacts}
     return [kind for kind in desired_kinds if kind not in existing]
 
@@ -72,7 +80,10 @@ def _extract_source_hints(source_text: str) -> dict[str, str]:
     for label, pattern in (
         ("requirements", r"(?im)^(?:##\s*)?requirements?\s*[:\n](.+?)(?:\n##|\Z)"),
         ("description", r"(?im)^(?:##\s*)?description\s*[:\n](.+?)(?:\n##|\Z)"),
-        ("implementation_plan", r"(?im)^(?:##\s*)?implementation\s+plan\s*[:\n](.+?)(?:\n##|\Z)"),
+        (
+            "implementation_plan",
+            r"(?im)^(?:##\s*)?implementation\s+plan\s*[:\n](.+?)(?:\n##|\Z)",
+        ),
     ):
         match = re.search(pattern, source_text, re.DOTALL)
         if match:
@@ -90,10 +101,25 @@ def plan_spec_generation(
     required_kinds: list[str] | tuple[str, ...] | None = None,
     kind: str | None = None,
 ) -> SpecPlan:
-    desired = tuple(required_kinds or ((kind,) if kind else kinds_for_signal(infer_ticket_signal(ticket_id, source_text))))
+    desired = tuple(
+        required_kinds
+        or (
+            (kind,)
+            if kind
+            else kinds_for_signal(infer_ticket_signal(ticket_id, source_text))
+        )
+    )
     existing = tuple(str(item) for item in existing_artifacts)
     missing = missing_spec_kinds(existing, desired)
-    return SpecPlan(ticket_id, slug_ticket_id(ticket_id), existing, desired, tuple(missing), bool(missing), _extract_source_hints(source_text))
+    return SpecPlan(
+        ticket_id,
+        slug_ticket_id(ticket_id),
+        existing,
+        desired,
+        tuple(missing),
+        bool(missing),
+        _extract_source_hints(source_text),
+    )
 
 
 def template_path(skills_dir: Path, kind: str) -> Path:

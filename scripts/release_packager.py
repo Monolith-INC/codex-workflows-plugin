@@ -4,12 +4,12 @@ import argparse
 import json
 import zipfile
 from collections.abc import Iterable
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 
 def build_release_package(*, repo_root: Path, output_dir: Path) -> Path:
-    manifest_path = repo_root / ".codex-plugin" / "plugin.json"
+    manifest_path = repo_root / "codex-workflows-plugin.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     package_name = manifest["name"]
     version = manifest["version"]
@@ -19,7 +19,9 @@ def build_release_package(*, repo_root: Path, output_dir: Path) -> Path:
 
     included_files = sorted(_iter_release_files(repo_root))
 
-    with zipfile.ZipFile(archive_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+    with zipfile.ZipFile(
+        archive_path, "w", compression=zipfile.ZIP_DEFLATED
+    ) as archive:
         for file_path in included_files:
             archive.write(file_path, file_path.relative_to(repo_root).as_posix())
 
@@ -29,8 +31,11 @@ def build_release_package(*, repo_root: Path, output_dir: Path) -> Path:
                 {
                     "package_name": package_name,
                     "version": version,
-                    "generated_at": datetime.now().isoformat(),
-                    "included_files": [path.relative_to(repo_root).as_posix() for path in included_files],
+                    "generated_at": datetime.now(timezone.utc).isoformat(),
+                    "included_files": [
+                        path.relative_to(repo_root).as_posix()
+                        for path in included_files
+                    ],
                 },
                 indent=2,
                 sort_keys=True,
@@ -42,19 +47,20 @@ def build_release_package(*, repo_root: Path, output_dir: Path) -> Path:
 
 def _iter_release_files(repo_root: Path) -> Iterable[Path]:
     allow_dirs = [
-        repo_root / ".codex-plugin",
-        repo_root / ".claude-plugin",
-        repo_root / ".cursor-plugin",
         repo_root / "commands",
-        repo_root / "hooks",
         repo_root / "skills",
         repo_root / "scripts",
         repo_root / "docs" / "adr",
     ]
     allow_files = {
+        repo_root / ".markdownlint-cli2.jsonc",
+        repo_root / "codex-workflows-plugin.json",
         repo_root / "README.md",
         repo_root / "install.sh",
-        repo_root / ".mcp.json",
+        repo_root / "package-lock.json",
+        repo_root / "package.json",
+        repo_root / "pyproject.toml",
+        repo_root / "requirements-dev.txt",
         repo_root / "docs" / "roadmap.md",
         repo_root / "docs" / "provider-neutral-workflow.md",
         repo_root / "CHANGELOG.md",
@@ -73,9 +79,15 @@ def _iter_release_files(repo_root: Path) -> Iterable[Path]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Build a versioned release archive for codex-workflows-plugin.")
+    parser = argparse.ArgumentParser(
+        description="Build a versioned release archive for codex-workflows-plugin."
+    )
     parser.add_argument("--repo-root", default=".", help="Repository root to package")
-    parser.add_argument("--output-dir", default="dist", help="Directory where the archive should be written")
+    parser.add_argument(
+        "--output-dir",
+        default="dist",
+        help="Directory where the archive should be written",
+    )
     args = parser.parse_args()
 
     archive_path = build_release_package(

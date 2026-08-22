@@ -5,6 +5,7 @@ These rules are based on the [Material 3 Design Guidelines](https://m3.material.
 ## 1. Layout & Adaptive Design
 
 ### Window Size Classes (Width Breakpoints)
+
 - **Compact:** < 600dp (Phones in portrait) -> Use `NavigationBar`
 - **Medium:** 600 – 839dp (Tablets in portrait, Foldables) -> Use `NavigationRail`
 - **Expanded:** 840 – 1199dp (Tablets in landscape, Desktop) -> Use `NavigationRail` (Extended) or `NavigationDrawer` (Permanent)
@@ -12,11 +13,13 @@ These rules are based on the [Material 3 Design Guidelines](https://m3.material.
 - **Extra-large:** 1600dp+ (Large monitors)
 
 ### Canonical Layouts
+
 - **List-detail:** Show list and detail side-by-side on Medium+ screens.
 - **Supporting pane:** Show primary content with a side pane for filters/metadata on Medium+ screens.
 - **Feed:** Single column on Compact/Medium, multi-column on Expanded+.
 
 ### Adaptive Implementation (Flutter)
+
 - Use `AdaptiveScaffold` from `package:flutter_adaptive_scaffold`.
 - Switch navigation components automatically using `AdaptiveScaffold.destinations`.
 - Use `AdaptiveScaffold.secondaryBody` for List-detail or Supporting pane patterns.
@@ -24,6 +27,7 @@ These rules are based on the [Material 3 Design Guidelines](https://m3.material.
 ## 2. Components
 
 ### Cards
+
 - **Corner Radius:** 12dp.
 - **Internal Padding:** 16dp.
 - **Elevation:**
@@ -32,6 +36,7 @@ These rules are based on the [Material 3 Design Guidelines](https://m3.material.
   - Outlined: Level 0.
 
 ### Dialogs
+
 - **Corner Radius:** 28dp.
 - **Elevation:** Level 3.
 - **Internal Padding:** 24dp for container, 16dp between content elements.
@@ -40,6 +45,7 @@ These rules are based on the [Material 3 Design Guidelines](https://m3.material.
   - Medium/Expanded: Fixed width or percentage of screen width (max-width typically 560dp).
 
 ### Buttons (Filled, Tonal, Outlined)
+
 - **Height:** 40dp.
 - **Corner Radius:** Stadium shape (fully rounded).
 - **Padding:**
@@ -47,6 +53,7 @@ These rules are based on the [Material 3 Design Guidelines](https://m3.material.
   - With Icon: 16dp leading (icon side), 24dp trailing.
 
 ### Text Fields
+
 - **Height:** 56dp (standard).
 - **Content Padding:** 16dp horizontal.
 - **Border Radius:**
@@ -57,6 +64,7 @@ These rules are based on the [Material 3 Design Guidelines](https://m3.material.
 ## 3. Flutter Implementation Patterns
 
 ### Button Style
+
 ```dart
 FilledButton(
   style: FilledButton.styleFrom(
@@ -70,6 +78,7 @@ FilledButton(
 ```
 
 ### Text Field Style
+
 ```dart
 TextFormField(
   decoration: InputDecoration(
@@ -80,6 +89,7 @@ TextFormField(
 ```
 
 ### Adaptive Layout
+
 ```dart
 AdaptiveScaffold(
   destinations: destinations,

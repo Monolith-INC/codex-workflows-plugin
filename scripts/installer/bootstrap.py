@@ -25,9 +25,13 @@ from collections.abc import Iterator
 from contextlib import contextmanager, nullcontext
 from pathlib import Path
 
-_MANAGED_HOOK_MARKERS = ("codex-workflows-plugin", "codex_workflows", "workflow-integrations")
+_MANAGED_HOOK_MARKERS = (
+    "codex-workflows-plugin",
+    "codex_workflows",
+    "workflow-integrations",
+)
 
-_RUNTIME_DIRS = ["scripts", "skills", "commands", ".agent", "hooks", ".codex-plugin"]
+_RUNTIME_DIRS = ["scripts", "skills", "commands"]
 
 _INTERACTIVE_AZURE_DEVOPS_ENV_VARS = [
     "DISPLAY",
@@ -102,7 +106,8 @@ def strip_managed_hooks(config: dict, script_names: set[str]) -> dict:
                     cleaned.append(entry)
                     continue
                 fresh_hooks = [
-                    h for h in entry["hooks"]
+                    h
+                    for h in entry["hooks"]
                     if not any(s in h.get("command", "") for s in script_names)
                 ]
                 if fresh_hooks:
@@ -125,7 +130,7 @@ def wire_orchestrator_mcp(install_dir: Path, project_dest: Path) -> bool:
 
     servers = existing.setdefault("mcpServers", {})
     install_root = install_dir.resolve()
-    skills_dir = (install_root / "skills")
+    skills_dir = install_root / "skills"
     launcher = install_root / "scripts" / "orchestrator" / "run_mcp_server.py"
     gateway_launcher = install_root / "scripts" / "integrations" / "run_gateway.py"
     servers["agentic-orchestrator"] = {
@@ -177,11 +182,21 @@ def configure_integrations(
         payload = json.loads(config_source.read_text(encoding="utf-8"))
         if not isinstance(payload, dict):
             raise ValueError("integration config must be a JSON object")
-        if payload.get("schemaVersion") != 1 or not isinstance(payload.get("branchTemplate"), str) or "{key}" not in payload["branchTemplate"]:
-            raise ValueError("integration config must declare schemaVersion 1 and branchTemplate containing {key}")
-        if not isinstance(payload.get("tracker"), dict) or not payload["tracker"].get("adapter"):
+        if (
+            payload.get("schemaVersion") != 1
+            or not isinstance(payload.get("branchTemplate"), str)
+            or "{key}" not in payload["branchTemplate"]
+        ):
+            raise ValueError(
+                "integration config must declare schemaVersion 1 and branchTemplate containing {key}"
+            )
+        if not isinstance(payload.get("tracker"), dict) or not payload["tracker"].get(
+            "adapter"
+        ):
             raise ValueError("integration config tracker.adapter is required")
-        if not isinstance(payload.get("scm"), dict) or not payload["scm"].get("adapter"):
+        if not isinstance(payload.get("scm"), dict) or not payload["scm"].get(
+            "adapter"
+        ):
             raise ValueError("integration config scm.adapter is required")
     else:
         if "{key}" not in branch_template:
@@ -249,11 +264,17 @@ def configure_integrations(
 
     path = project_dest / ".codex-workflows" / "integrations.json"
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    if payload["tracker"].get("adapter") == "local_tracker":
+        _initialize_local_tracker(project_dest, payload["tracker"])
     return path
 
 
-def _default_tracker_config(provider: str, scope: str, project_dest: Path | None = None) -> dict:
+def _default_tracker_config(
+    provider: str, scope: str, project_dest: Path | None = None
+) -> dict:
     from scripts.integrations.discovery import mapping_presets
 
     presets = mapping_presets(provider)
@@ -261,7 +282,10 @@ def _default_tracker_config(provider: str, scope: str, project_dest: Path | None
         return {
             "adapter": "linear",
             "scope": scope,
-            "connection": {"command": "npx", "args": ["-y", "mcp-remote", "https://mcp.linear.app/mcp"]},
+            "connection": {
+                "command": "npx",
+                "args": ["-y", "mcp-remote", "https://mcp.linear.app/mcp"],
+            },
             "mappings": presets,
             "bindings": {
                 "get_work_item": "get_issue",
@@ -280,7 +304,15 @@ def _default_tracker_config(provider: str, scope: str, project_dest: Path | None
             "scope": scope,
             "connection": {
                 "command": "npx",
-                "args": ["-y", "@azure-devops/mcp", _azure_org_arg(project_dest), "-d", "core", "work-items", "repositories"],
+                "args": [
+                    "-y",
+                    "@azure-devops/mcp",
+                    _azure_org_arg(project_dest),
+                    "-d",
+                    "core",
+                    "work-items",
+                    "repositories",
+                ],
             },
             "mappings": presets,
             "bindings": {
@@ -294,13 +326,63 @@ def _default_tracker_config(provider: str, scope: str, project_dest: Path | None
                 "link_development_artifact": "wit_add_artifact_link",
             },
         }
+    if provider == "local_tracker":
+        return {
+            "adapter": "local_tracker",
+            "root": ".local-tracker",
+            "storagePolicy": "committed",
+            "mappings": presets,
+            "bindings": {},
+        }
     raise ValueError(f"unsupported tracker: {provider}")
+
+
+def _initialize_local_tracker(project_dest: Path, tracker: dict) -> None:
+    root = project_dest / str(tracker.get("root") or ".local-tracker")
+    root.mkdir(parents=True, exist_ok=True)
+    for state in ("backlog", "ready", "in_progress", "done", "canceled", "artifacts"):
+        (root / state).mkdir(exist_ok=True)
+    _set_local_tracker_ignore(
+        project_dest, str(tracker.get("storagePolicy") or "committed") == "ignored"
+    )
+
+
+def _set_local_tracker_ignore(project_dest: Path, ignored: bool) -> None:
+    path = project_dest / ".gitignore"
+    start = "# codex-workflows-plugin local tracker (managed)"
+    entry = ".local-tracker/"
+    existing = path.read_text(encoding="utf-8") if path.is_file() else ""
+    lines = existing.splitlines()
+    filtered: list[str] = []
+    skip_next = False
+    for line in lines:
+        if line == start:
+            skip_next = True
+            continue
+        if skip_next and line == entry:
+            skip_next = False
+            continue
+        skip_next = False
+        filtered.append(line)
+    if ignored:
+        if filtered and filtered[-1]:
+            filtered.append("")
+        filtered.extend((start, entry))
+    content = "\n".join(filtered).rstrip() + "\n" if filtered else ""
+    if content or path.exists():
+        path.write_text(content, encoding="utf-8")
 
 
 def _default_scm_config(provider: str, project_dest: Path) -> dict:
     if provider == "github":
         owner, repo = _github_remote(project_dest)
-        return {"adapter": "github", "owner": owner, "repo": repo, "connection": {"command": "gh", "args": []}, "bindings": {}}
+        return {
+            "adapter": "github",
+            "owner": owner,
+            "repo": repo,
+            "connection": {"command": "gh", "args": []},
+            "bindings": {},
+        }
     if provider == "azure_repos":
         org, project, repo = _azure_remote(project_dest)
         return {
@@ -310,7 +392,15 @@ def _default_scm_config(provider: str, project_dest: Path) -> dict:
             "repository": repo,
             "connection": {
                 "command": "npx",
-                "args": ["-y", "@azure-devops/mcp", _azure_org_arg(project_dest, fallback=org), "-d", "core", "repositories", "work-items"],
+                "args": [
+                    "-y",
+                    "@azure-devops/mcp",
+                    _azure_org_arg(project_dest, fallback=org),
+                    "-d",
+                    "core",
+                    "repositories",
+                    "work-items",
+                ],
             },
             "bindings": {
                 "get_pull_request": "repo_get_pull_request_by_id",
@@ -339,7 +429,12 @@ def _azure_org_arg(project_dest: Path | None = None, *, fallback: str = "") -> s
 
 def _github_remote(project_dest: Path) -> tuple[str, str]:
     try:
-        remote = subprocess.run(["git", "-C", str(project_dest), "remote", "get-url", "origin"], capture_output=True, text=True, check=True).stdout.strip()
+        remote = subprocess.run(
+            ["git", "-C", str(project_dest), "remote", "get-url", "origin"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
     except (OSError, subprocess.CalledProcessError):
         return "", ""
     value = remote.removesuffix(".git")
@@ -347,12 +442,19 @@ def _github_remote(project_dest: Path) -> tuple[str, str]:
         return "", value.rsplit("/", 1)[-1]
     tail = value.split("github.com", 1)[-1].lstrip(":/")
     parts = tail.split("/")
-    return (parts[-2], parts[-1]) if len(parts) >= 2 else ("", parts[-1] if parts else "")
+    return (
+        (parts[-2], parts[-1]) if len(parts) >= 2 else ("", parts[-1] if parts else "")
+    )
 
 
 def _azure_remote(project_dest: Path) -> tuple[str, str, str]:
     try:
-        remote = subprocess.run(["git", "-C", str(project_dest), "remote", "get-url", "origin"], capture_output=True, text=True, check=True).stdout.strip()
+        remote = subprocess.run(
+            ["git", "-C", str(project_dest), "remote", "get-url", "origin"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
     except (OSError, subprocess.CalledProcessError):
         return "", "", ""
     value = remote.removesuffix(".git")
@@ -400,8 +502,7 @@ def _cursor_mcp_server_config(config: dict) -> dict:
     """Forward Azure interactive session vars via Cursor ${env:NAME} interpolation."""
     args = config.get("args")
     if not isinstance(args, list) or not any(
-        isinstance(arg, str) and arg.startswith("@azure-devops/mcp")
-        for arg in args
+        isinstance(arg, str) and arg.startswith("@azure-devops/mcp") for arg in args
     ):
         return dict(config)
 
@@ -471,7 +572,11 @@ def _strip_codex_mcp_server_sections(content: str, server_names: set[str]) -> st
 
 def _toml_header(line: str) -> str | None:
     stripped = line.strip()
-    if stripped.startswith("[[") or not stripped.startswith("[") or not stripped.endswith("]"):
+    if (
+        stripped.startswith("[[")
+        or not stripped.startswith("[")
+        or not stripped.endswith("]")
+    ):
         return None
     return stripped[1:-1].strip()
 
@@ -492,14 +597,24 @@ def _replace_mcp_server_section(header: str, server_names: set[str]) -> bool:
 
 
 def _render_codex_mcp_server(name: str, config: dict) -> str:
-    lines = [f'[mcp_servers.{_toml_key(name)}]']
-    for key in ("command", "url", "args", "env_vars", "cwd", "enabled", "required", "startup_timeout_sec", "tool_timeout_sec"):
+    lines = [f"[mcp_servers.{_toml_key(name)}]"]
+    for key in (
+        "command",
+        "url",
+        "args",
+        "env_vars",
+        "cwd",
+        "enabled",
+        "required",
+        "startup_timeout_sec",
+        "tool_timeout_sec",
+    ):
         if key in config:
             lines.append(f"{key} = {_toml_value(config[key])}")
     env = config.get("env")
     if isinstance(env, dict) and env:
         lines.append("")
-        lines.append(f'[mcp_servers.{_toml_key(name)}.env]')
+        lines.append(f"[mcp_servers.{_toml_key(name)}.env]")
         for key, value in sorted(env.items()):
             lines.append(f"{_toml_key(key)} = {_toml_value(value)}")
     return "\n".join(lines)
@@ -509,8 +624,7 @@ def _codex_mcp_server_config(config: dict) -> dict:
     """Forward the desktop session required by Azure interactive browser auth."""
     args = config.get("args")
     if not isinstance(args, list) or not any(
-        isinstance(arg, str) and arg.startswith("@azure-devops/mcp")
-        for arg in args
+        isinstance(arg, str) and arg.startswith("@azure-devops/mcp") for arg in args
     ):
         return config
 
@@ -606,7 +720,11 @@ def wire(install_dir: Path, target: str, project_dest: str | Path) -> int:
         }
 
         if target == "all-agents":
-            targets = [t.value for t in Target if t not in {Target.UNIVERSAL, Target.ALL_AGENTS}]
+            targets = [
+                t.value
+                for t in Target
+                if t not in {Target.UNIVERSAL, Target.ALL_AGENTS}
+            ]
         else:
             targets = [target]
 
@@ -624,11 +742,19 @@ def wire(install_dir: Path, target: str, project_dest: str | Path) -> int:
                     if config_path.exists():
                         on_disk = json.loads(config_path.read_text(encoding="utf-8"))
                     if on_disk:
-                        on_disk = strip_managed_cursor_hooks(on_disk, set(_MANAGED_HOOK_MARKERS))
-                    final_config = merge_cursor_hooks(on_disk, desired_cursor_hooks(hook_command))
+                        on_disk = strip_managed_cursor_hooks(
+                            on_disk, set(_MANAGED_HOOK_MARKERS)
+                        )
+                    final_config = merge_cursor_hooks(
+                        on_disk, desired_cursor_hooks(hook_command)
+                    )
                     config_path.parent.mkdir(parents=True, exist_ok=True)
-                    config_path.write_text(json.dumps(final_config, indent=2) + "\n", encoding="utf-8")
-                    successful_wirings.append((client_name, str(config_path), hook_command))
+                    config_path.write_text(
+                        json.dumps(final_config, indent=2) + "\n", encoding="utf-8"
+                    )
+                    successful_wirings.append(
+                        (client_name, str(config_path), hook_command)
+                    )
                 except Exception as e:
                     failed_wirings.append((client_name, str(e)))
                 continue
@@ -637,10 +763,14 @@ def wire(install_dir: Path, target: str, project_dest: str | Path) -> int:
                 result = install(t, dest_root=dest_path, plugin_root=install_dir)
                 if result.config_paths:
                     config_path = dest_path / result.config_paths[0]
-                    cmd = result.merged_config and _extract_command(result.merged_config)
+                    cmd = result.merged_config and _extract_command(
+                        result.merged_config
+                    )
                     successful_wirings.append((client_name, str(config_path), cmd))
                 else:
-                    skipped_wirings.append((client_name, "No config paths defined for target"))
+                    skipped_wirings.append(
+                        (client_name, "No config paths defined for target")
+                    )
             except Exception as e:
                 failed_wirings.append((client_name, f"Exception: {e}"))
 
@@ -678,7 +808,9 @@ def wire(install_dir: Path, target: str, project_dest: str | Path) -> int:
             print(f"Wired agentic-orchestrator MCP server → {dest_path / '.mcp.json'}")
             print(f"  Codex MCP mirror → {dest_path / '.codex' / 'config.toml'}")
             print(f"  Cursor MCP mirror → {dest_path / '.cursor' / 'mcp.json'}")
-            print(f"  Claude MCP enablement → {dest_path / '.claude' / 'settings.local.json'}")
+            print(
+                f"  Claude MCP enablement → {dest_path / '.claude' / 'settings.local.json'}"
+            )
         else:
             print(
                 f"Warning: Could not write agentic-orchestrator MCP config to {dest_path / '.mcp.json'}",
@@ -686,13 +818,18 @@ def wire(install_dir: Path, target: str, project_dest: str | Path) -> int:
             )
 
         if target == "all-agents" and not successful_wirings:
-            print("Error: None of the agent clients could be successfully wired.", file=sys.stderr)
+            print(
+                "Error: None of the agent clients could be successfully wired.",
+                file=sys.stderr,
+            )
             print("=" * 70 + "\n")
             return 1
 
         print("Further Instructions:")
         print("  1. Restart your active CLI / IDE client session in this project.")
-        print("  2. Claude discovers skills/commands under .claude/; Antigravity under .agents/skills/.")
+        print(
+            "  2. Claude discovers skills/commands under .claude/; Antigravity under .agents/skills/."
+        )
         print("=" * 70 + "\n")
         return 0
 
@@ -706,7 +843,9 @@ def _extract_command(config: dict) -> str | None:
                 for entry in event_hooks:
                     if isinstance(entry, dict) and "command" in entry:
                         return entry["command"]
-                    for hook in entry.get("hooks", []) if isinstance(entry, dict) else []:
+                    for hook in (
+                        entry.get("hooks", []) if isinstance(entry, dict) else []
+                    ):
                         if "command" in hook:
                             return hook["command"]
     return None
@@ -737,11 +876,31 @@ def main() -> int:
         "--target",
         help="Agent host to wire: claude, codex, gemini, antigravity, cursor, all-agents.",
     )
-    parser.add_argument("--tracker", choices=("linear", "azure_devops"), help="Tracker adapter to configure.")
-    parser.add_argument("--scm", choices=("github", "azure_repos"), help="SCM adapter to configure.")
-    parser.add_argument("--tracker-scope", default="auto", help="Tracker workspace/project/team scope.")
-    parser.add_argument("--branch-template", default="{category}/{key}-{slug}", help="Branch format containing {key}.")
-    parser.add_argument("--integration-config", type=Path, help="Validated integration JSON to install.")
+    parser.add_argument(
+        "--tracker",
+        choices=("linear", "azure_devops", "local_tracker"),
+        help="Tracker adapter to configure.",
+    )
+    parser.add_argument(
+        "--local-tracker-storage",
+        choices=("committed", "ignored"),
+        default="committed",
+        help="Whether local tracker records are committed or ignored.",
+    )
+    parser.add_argument(
+        "--scm", choices=("github", "azure_repos"), help="SCM adapter to configure."
+    )
+    parser.add_argument(
+        "--tracker-scope", default="auto", help="Tracker workspace/project/team scope."
+    )
+    parser.add_argument(
+        "--branch-template",
+        default="{category}/{key}-{slug}",
+        help="Branch format containing {key}.",
+    )
+    parser.add_argument(
+        "--integration-config", type=Path, help="Validated integration JSON to install."
+    )
     parser.add_argument(
         "--skip-discovery",
         action="store_true",
@@ -801,7 +960,11 @@ def main() -> int:
         install_from_zip(zip_path, install_dir)
         print(f"Installed to {install_dir}")
         installed_runtime = True
-    elif zip_path is not None and args.uninstall and not (install_dir / "scripts").is_dir():
+    elif (
+        zip_path is not None
+        and args.uninstall
+        and not (install_dir / "scripts").is_dir()
+    ):
         # Need uninstall helpers from the zip when no prior project runtime exists.
         install_from_zip(zip_path, install_dir)
         installed_runtime = True
@@ -822,7 +985,11 @@ def main() -> int:
                 keep_runtime=args.keep_runtime,
                 dry_run=args.dry_run,
             )
-            print("\n".join(plan.messages) if plan.messages else "No managed plugin interventions found.")
+            print(
+                "\n".join(plan.messages)
+                if plan.messages
+                else "No managed plugin interventions found."
+            )
             return 0
 
         if not installed_runtime:
@@ -838,7 +1005,10 @@ def main() -> int:
             print(f"\nWiring {args.target} → {dest_path} ...")
             # Re-enter install import path after source install may have created scripts/.
             if not (install_dir / "scripts").is_dir():
-                print(f"error: runtime scripts missing under {install_dir}", file=sys.stderr)
+                print(
+                    f"error: runtime scripts missing under {install_dir}",
+                    file=sys.stderr,
+                )
                 return 1
             result = wire(install_dir, args.target, dest_path)
             if result != 0:
@@ -856,7 +1026,10 @@ def main() -> int:
                     discover=not args.skip_discovery,
                 )
             elif not args.tracker or not args.scm:
-                print("error: --tracker and --scm are required when --integration-config is not supplied", file=sys.stderr)
+                print(
+                    "error: --tracker and --scm are required when --integration-config is not supplied",
+                    file=sys.stderr,
+                )
                 return 1
             else:
                 config_path = configure_integrations(
@@ -867,6 +1040,16 @@ def main() -> int:
                     tracker_scope=args.tracker_scope,
                     discover=not args.skip_discovery,
                 )
+            if args.tracker == "local_tracker":
+                payload = json.loads(config_path.read_text(encoding="utf-8"))
+                tracker = dict(payload["tracker"])
+                tracker["storagePolicy"] = args.local_tracker_storage
+                payload["tracker"] = tracker
+                config_path.write_text(
+                    json.dumps(payload, indent=2, sort_keys=True) + "\n",
+                    encoding="utf-8",
+                )
+                _initialize_local_tracker(dest_path, tracker)
             print(f"Integration configuration written to {config_path}")
 
         print("\n" + "=" * 70)
@@ -874,7 +1057,9 @@ def main() -> int:
         print("=" * 70)
         print(f"Runtime installed to: {install_dir}")
         print("To wire agent hosts in this project, run:")
-        print(f"  python3 -m scripts.installer.bootstrap --target all-agents --dest {dest_path}")
+        print(
+            f"  python3 -m scripts.installer.bootstrap --target all-agents --dest {dest_path}"
+        )
         print("=" * 70 + "\n")
         return 0
 

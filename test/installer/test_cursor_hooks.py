@@ -20,7 +20,12 @@ class TestCursorHooks(unittest.TestCase):
         existing = {
             "version": 1,
             "hooks": {
-                "preToolUse": [{"command": "python3 /tmp/cursor_enforce_hook.py", "matcher": "Shell"}],
+                "preToolUse": [
+                    {
+                        "command": "python3 /tmp/cursor_enforce_hook.py",
+                        "matcher": "Shell",
+                    }
+                ],
                 "sessionStart": [{"command": ".cursor/hooks/bootstrap.sh"}],
             },
         }
@@ -41,7 +46,9 @@ class TestCursorHooks(unittest.TestCase):
         }
         stripped = strip_managed_cursor_hooks(config, {"cursor_enforce_hook.py"})
         self.assertEqual(len(stripped["hooks"]["preToolUse"]), 1)
-        self.assertEqual(stripped["hooks"]["preToolUse"][0]["command"], ".cursor/hooks/custom.sh")
+        self.assertEqual(
+            stripped["hooks"]["preToolUse"][0]["command"], ".cursor/hooks/custom.sh"
+        )
 
 
 if __name__ == "__main__":

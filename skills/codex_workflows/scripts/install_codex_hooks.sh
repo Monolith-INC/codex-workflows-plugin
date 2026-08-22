@@ -8,7 +8,7 @@ PROFILE="${2:-generic}"
 
 case "$TARGET" in
   codex)
-    OUTPUT_PATH="$PROJECT_ROOT/hooks/hooks.json"
+    OUTPUT_PATH="$PROJECT_ROOT/.codex/hooks.json"
     ;;
   gemini)
     OUTPUT_PATH="$PROJECT_ROOT/.gemini/settings.json"

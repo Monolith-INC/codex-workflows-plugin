@@ -28,7 +28,13 @@ If the runtime is already present under `<project>/.codex-workflows/`, re-run th
 
 ```bash
 python3 -m scripts.installer.bootstrap --dest <project> --target all-agents \
-  --tracker linear --scm github --branch-template '{category}/{key}-{slug}'
+  --tracker local_tracker --local-tracker-storage committed --scm github \
+  --branch-template '{category}/{key}-{slug}'
 ```
+
+Use `linear` or `azure_devops` instead when an external tracker is available. Local
+tracker creates `.local-tracker/` state folders and stores Epic → Feature → User
+Story → Task records and versioned artifacts there; `--local-tracker-storage
+ignored` manages its `.gitignore` entry instead of committing the records.
 
 Preserve `integrations.json` across reinstalls unless the user asks to reset it. Verify both `agentic-orchestrator` and `workflow-integrations` MCP servers after wiring. Restart the agent session when done.
