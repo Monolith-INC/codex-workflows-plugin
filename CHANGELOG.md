@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.23
+
+### Linear MCP compatibility
+- Updated Linear tracker discovery to prefer the current `save_issue` and `save_comment` MCP tools for write operations.
+- Updated bootstrap defaults so rewiring Linear integrations preserves create, transition, publish, and development-artifact link bindings.
+- Added regression coverage for renamed Linear write bindings in discovery and installer defaults.
+
 ## 0.5.22
 
 ### Documentation and install
