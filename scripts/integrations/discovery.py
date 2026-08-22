@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any
 
 from .contracts import IntegrationError
 from .mcp_client import StdioMcpClient, client_from_connection
-
 
 REQUIRED_TRACKER_OPS = (
     "get_work_item",
@@ -61,23 +61,69 @@ ADO_STATE_PRESET = {
     "canceled": "Removed",
 }
 
+LOCAL_KIND_PRESET = {kind: kind for kind in REQUIRED_KIND_KEYS}
+LOCAL_STATE_PRESET = {state: state for state in REQUIRED_STATE_KEYS}
+
 TRACKER_BINDING_CANDIDATES: dict[str, tuple[str, ...]] = {
     "get_work_item": ("get_issue", "get_work_item", "wit_get_work_item"),
-    "search_work_items": ("list_issues", "search_issues", "search_work_items", "wit_query_by_wiql"),
-    "create_work_item": ("save_issue", "create_issue", "create_work_item", "wit_create_work_item"),
-    "list_children": ("list_issue_children", "list_children", "list_issues", "wit_get_work_items"),
-    "transition_work_item": ("save_issue", "update_issue", "transition_issue", "transition_work_item", "wit_update_work_item"),
-    "publish_artifact": ("save_comment", "create_comment", "publish_artifact", "wit_add_work_item_comment"),
+    "search_work_items": (
+        "list_issues",
+        "search_issues",
+        "search_work_items",
+        "wit_query_by_wiql",
+    ),
+    "create_work_item": (
+        "save_issue",
+        "create_issue",
+        "create_work_item",
+        "wit_create_work_item",
+    ),
+    "list_children": (
+        "list_issue_children",
+        "list_children",
+        "list_issues",
+        "wit_get_work_items",
+    ),
+    "transition_work_item": (
+        "save_issue",
+        "update_issue",
+        "transition_issue",
+        "transition_work_item",
+        "wit_update_work_item",
+    ),
+    "publish_artifact": (
+        "save_comment",
+        "create_comment",
+        "publish_artifact",
+        "wit_add_work_item_comment",
+    ),
     "list_artifacts": ("list_comments", "list_artifacts", "wit_get_work_item_comments"),
-    "link_development_artifact": ("save_comment", "create_comment", "link_development_artifact", "wit_add_artifact_link"),
+    "link_development_artifact": (
+        "save_comment",
+        "create_comment",
+        "link_development_artifact",
+        "wit_add_artifact_link",
+    ),
 }
 
 SCM_BINDING_CANDIDATES: dict[str, tuple[str, ...]] = {
-    "get_pull_request": ("repo_get_pull_request_by_id", "get_pull_request", "get_pull_request_by_id"),
+    "get_pull_request": (
+        "repo_get_pull_request_by_id",
+        "get_pull_request",
+        "get_pull_request_by_id",
+    ),
     "create_pull_request": ("repo_create_pull_request", "create_pull_request"),
-    "list_review_threads": ("repo_list_pull_request_threads", "list_review_threads", "list_pull_request_threads"),
+    "list_review_threads": (
+        "repo_list_pull_request_threads",
+        "list_review_threads",
+        "list_pull_request_threads",
+    ),
     "reply_to_thread": ("repo_reply_to_comment", "reply_to_thread", "reply_to_comment"),
-    "link_work_item": ("wit_link_work_item_to_pull_request", "link_work_item", "link_work_item_to_pull_request"),
+    "link_work_item": (
+        "wit_link_work_item_to_pull_request",
+        "link_work_item",
+        "link_work_item_to_pull_request",
+    ),
 }
 
 
@@ -94,9 +140,17 @@ class DiscoveryResult:
 def mapping_presets(adapter: str) -> dict[str, dict[str, str]]:
     match adapter:
         case "linear":
-            return {"kinds": dict(LINEAR_KIND_PRESET), "states": dict(LINEAR_STATE_PRESET)}
+            return {
+                "kinds": dict(LINEAR_KIND_PRESET),
+                "states": dict(LINEAR_STATE_PRESET),
+            }
         case "azure_devops":
             return {"kinds": dict(ADO_KIND_PRESET), "states": dict(ADO_STATE_PRESET)}
+        case "local_tracker":
+            return {
+                "kinds": dict(LOCAL_KIND_PRESET),
+                "states": dict(LOCAL_STATE_PRESET),
+            }
         case _:
             return {"kinds": {}, "states": {}}
 
@@ -112,7 +166,8 @@ def resolve_bindings(
     preferred = preferred or {}
     for operation, aliases in candidates.items():
         ordered = (
-            (preferred[operation],) + tuple(a for a in aliases if a != preferred[operation])
+            (preferred[operation],)
+            + tuple(a for a in aliases if a != preferred[operation])
             if preferred.get(operation)
             else aliases
         )
@@ -135,12 +190,21 @@ def discover_provider_capabilities(
 ) -> DiscoveryResult:
     if adapter == "github":
         return DiscoveryResult(
-            discovered_tools=("gh",),
+            discovered_tools=("github",),
             resolved_bindings={},
             suggested_mappings={"kinds": {}, "states": {}},
             missing_capabilities=(),
-            provider=adapter,
+            provider="github",
             kind="github",
+        )
+    if adapter == "local_tracker":
+        return DiscoveryResult(
+            discovered_tools=("local_tracker",),
+            resolved_bindings={},
+            suggested_mappings=mapping_presets(adapter),
+            missing_capabilities=(),
+            provider=adapter,
+            kind=kind,
         )
 
     tools = discovered_tools
@@ -148,9 +212,13 @@ def discover_provider_capabilities(
         mcp = client or client_from_connection(connection)
         tools = mcp.list_tools()
 
-    candidates = TRACKER_BINDING_CANDIDATES if kind == "tracker" else SCM_BINDING_CANDIDATES
+    candidates = (
+        TRACKER_BINDING_CANDIDATES if kind == "tracker" else SCM_BINDING_CANDIDATES
+    )
     resolved, missing = resolve_bindings(tools, candidates, preferred_bindings)
-    mappings = mapping_presets(adapter) if kind == "tracker" else {"kinds": {}, "states": {}}
+    mappings = (
+        mapping_presets(adapter) if kind == "tracker" else {"kinds": {}, "states": {}}
+    )
     return DiscoveryResult(
         discovered_tools=tuple(_tool_names(tools)),
         resolved_bindings=resolved,
@@ -176,7 +244,7 @@ def validate_tracker_mappings(mappings: Mapping[str, Any]) -> tuple[str, ...]:
 
 def validate_bindings(bindings: Mapping[str, Any], *, kind: str) -> tuple[str, ...]:
     required = REQUIRED_TRACKER_OPS if kind == "tracker" else REQUIRED_SCM_OPS
-    if kind == "github":
+    if kind in {"github", "local_tracker"}:
         return ()
     return tuple(op for op in required if not str(bindings.get(op) or "").strip())
 
@@ -203,7 +271,9 @@ def apply_discovery_to_config(
     return result
 
 
-def verify_integration_capabilities(config: dict[str, Any], *, probe: bool = False) -> list[str]:
+def verify_integration_capabilities(
+    config: dict[str, Any], *, probe: bool = False
+) -> list[str]:
     problems: list[str] = []
     tracker = config.get("tracker") if isinstance(config.get("tracker"), dict) else {}
     scm = config.get("scm") if isinstance(config.get("scm"), dict) else {}
@@ -228,18 +298,24 @@ def verify_integration_capabilities(config: dict[str, Any], *, probe: bool = Fal
             names = set(client_from_connection(tracker["connection"]).list_tools())
             for op, tool in (tracker.get("bindings") or {}).items():
                 if tool and tool not in names:
-                    problems.append(f"tracker binding {op} -> {tool} not advertised by provider")
+                    problems.append(
+                        f"tracker binding {op} -> {tool} not advertised by provider"
+                    )
         if scm_adapter not in {"", "github"} and scm.get("connection"):
             names = set(client_from_connection(scm["connection"]).list_tools())
             for op, tool in (scm.get("bindings") or {}).items():
                 if tool and tool not in names:
-                    problems.append(f"scm binding {op} -> {tool} not advertised by provider")
+                    problems.append(
+                        f"scm binding {op} -> {tool} not advertised by provider"
+                    )
     except IntegrationError as exc:
         problems.append(f"provider probe failed: {exc.code}: {exc}")
     return problems
 
 
-def _tool_names(discovered: Mapping[str, Any] | list[str] | tuple[str, ...] | None) -> set[str]:
+def _tool_names(
+    discovered: Mapping[str, Any] | list[str] | tuple[str, ...] | None,
+) -> set[str]:
     if discovered is None:
         return set()
     if isinstance(discovered, (list, tuple)):
@@ -254,5 +330,5 @@ def _tool_names(discovered: Mapping[str, Any] | list[str] | tuple[str, ...] | No
         tools = discovered.get("tools")
         if isinstance(tools, list):
             return _tool_names(tools)
-        return {str(key) for key in discovered.keys()}
+        return {str(key) for key in discovered}
     return set()

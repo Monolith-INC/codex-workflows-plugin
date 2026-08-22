@@ -21,7 +21,9 @@ def desired_cursor_hooks(hook_command: str) -> dict[str, Any]:
     }
 
 
-def strip_managed_cursor_hooks(config: dict[str, Any], script_names: set[str]) -> dict[str, Any]:
+def strip_managed_cursor_hooks(
+    config: dict[str, Any], script_names: set[str]
+) -> dict[str, Any]:
     """Remove preToolUse entries whose command references a managed script."""
     result = deepcopy(config)
     hooks = result.setdefault("hooks", {})
@@ -47,7 +49,9 @@ def strip_managed_cursor_hooks(config: dict[str, Any], script_names: set[str]) -
     return result
 
 
-def merge_cursor_hooks(existing: dict[str, Any] | None, incoming: dict[str, Any]) -> dict[str, Any]:
+def merge_cursor_hooks(
+    existing: dict[str, Any] | None, incoming: dict[str, Any]
+) -> dict[str, Any]:
     """Merge Cursor hook configs, deduplicating preToolUse entries by command string."""
     if not existing:
         return deepcopy(incoming)

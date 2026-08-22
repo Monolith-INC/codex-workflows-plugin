@@ -33,20 +33,26 @@ class TestMCPServer(unittest.TestCase):
                 },
                 f,
             )
-        (skill_path / "SKILL.md").write_text("# Mock skill\n\nRun mock.\n", encoding="utf-8")
+        (skill_path / "SKILL.md").write_text(
+            "# Mock skill\n\nRun mock.\n", encoding="utf-8"
+        )
         self.engine = OrchestratorEngine(self.skills_dir)
 
     def tearDown(self):
         self.test_dir.cleanup()
 
     def test_initialize(self):
-        request = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})
+        request = json.dumps(
+            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}
+        )
         response_str = process_message(request, self.engine)
 
         response = json.loads(response_str)
         self.assertEqual(response["id"], 1)
         self.assertIn("capabilities", response["result"])
-        self.assertEqual(response["result"]["serverInfo"]["name"], "agentic-orchestrator")
+        self.assertEqual(
+            response["result"]["serverInfo"]["name"], "agentic-orchestrator"
+        )
 
     def test_tools_list(self):
         request = json.dumps({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
@@ -97,10 +103,20 @@ class TestMCPServer(unittest.TestCase):
         import subprocess
         import sys
 
-        launcher = Path(__file__).resolve().parent.parent / "scripts" / "orchestrator" / "run_mcp_server.py"
+        launcher = (
+            Path(__file__).resolve().parent.parent
+            / "scripts"
+            / "orchestrator"
+            / "run_mcp_server.py"
+        )
         env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
         env["ORCHESTRATOR_SKILLS_DIR"] = str(self.skills_dir)
-        request = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}) + "\n"
+        request = (
+            json.dumps(
+                {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}
+            )
+            + "\n"
+        )
         proc = subprocess.run(
             [sys.executable, str(launcher)],
             input=request,
@@ -113,7 +129,9 @@ class TestMCPServer(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertNotIn("ModuleNotFoundError", proc.stderr)
         response = json.loads(proc.stdout.strip().splitlines()[0])
-        self.assertEqual(response["result"]["serverInfo"]["name"], "agentic-orchestrator")
+        self.assertEqual(
+            response["result"]["serverInfo"]["name"], "agentic-orchestrator"
+        )
 
 
 if __name__ == "__main__":

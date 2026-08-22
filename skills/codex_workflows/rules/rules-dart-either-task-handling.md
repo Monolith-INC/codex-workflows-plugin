@@ -5,10 +5,12 @@ This rule defines the standard for handling errors and asynchronous operations u
 ## 1. Core Principle: `Either<Failure, T>`
 
 Avoid throwing exceptions for expected errors. Instead, return an `Either<Failure, T>` type.
+
 - **Left**: Represents a `Failure` (domain error).
 - **Right**: Represents a Success value of type `T`.
 
 ### Usage
+
 When defining repository or service methods, the return type should be `Future<Either<Failure, T>>`.
 
 ```dart
@@ -41,10 +43,11 @@ result.fold(
 Use `Task` to compose asynchronous operations and handle exceptions in a functional way.
 
 ### Pattern
-1.  **Wrap**: Wrap the `Future` call in a `Task`.
-2.  **Attempt**: Use `.attempt()` to automatically catch all exceptions and convert the result to `Either<Object, T>`.
-3.  **Map Failure**: Convert the `Object` (exception) on the Left side to a domain `Failure`. RETHROW unexpected exceptions (programming errors).
-4.  **Run**: Call `.run()` to execute the `Task` and get a standard `Future<Either<Failure, T>>`.
+
+1. **Wrap**: Wrap the `Future` call in a `Task`.
+2. **Attempt**: Use `.attempt()` to automatically catch all exceptions and convert the result to `Either<Object, T>`.
+3. **Map Failure**: Convert the `Object` (exception) on the Left side to a domain `Failure`. RETHROW unexpected exceptions (programming errors).
+4. **Run**: Call `.run()` to execute the `Task` and get a standard `Future<Either<Failure, T>>`.
 
 ### Implementation Example
 

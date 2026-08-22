@@ -39,7 +39,9 @@ Path(os.environ["CODEX_WORKFLOWS_TEST_ARGV_OUT"]).write_text(
             archive.writestr("scripts/installer/interactive.py", interactive)
         return zip_path
 
-    def _run_install_script(self, *args: str, expect_success: bool = True) -> tuple[list[str] | None, subprocess.CompletedProcess[str]]:
+    def _run_install_script(
+        self, *args: str, expect_success: bool = True
+    ) -> tuple[list[str] | None, subprocess.CompletedProcess[str]]:
         with tempfile.TemporaryDirectory() as tempdir:
             root = Path(tempdir)
             zip_path = self._make_release_zip(root)
@@ -80,14 +82,20 @@ Path(os.environ["CODEX_WORKFLOWS_TEST_ARGV_OUT"]).write_text(
         self.assertEqual(argv[1:], ["--target", "all-agents", "--dest", "/tmp/project"])
 
     def test_preserves_explicit_target(self):
-        argv, _ = self._run_install_script("--target", "claude", "--dest", "/tmp/project")
+        argv, _ = self._run_install_script(
+            "--target", "claude", "--dest", "/tmp/project"
+        )
 
         self.assertEqual(argv[1:], ["--target", "claude", "--dest", "/tmp/project"])
 
     def test_uninstall_does_not_add_default_target(self):
-        argv, _ = self._run_install_script("--uninstall", "--keep-runtime", "--dest", "/tmp/project")
+        argv, _ = self._run_install_script(
+            "--uninstall", "--keep-runtime", "--dest", "/tmp/project"
+        )
 
-        self.assertEqual(argv[1:], ["--uninstall", "--keep-runtime", "--dest", "/tmp/project"])
+        self.assertEqual(
+            argv[1:], ["--uninstall", "--keep-runtime", "--dest", "/tmp/project"]
+        )
 
     def test_uses_gh_release_download_when_no_local_zip_is_supplied(self):
         with tempfile.TemporaryDirectory() as tempdir:
@@ -123,7 +131,14 @@ cp {release_zip} "$dest/codex-workflows-plugin-test.zip"
             }
 
             result = subprocess.run(
-                ["bash", str(REPO_ROOT / "install.sh"), "--target", "claude", "--dest", "/tmp/project"],
+                [
+                    "bash",
+                    str(REPO_ROOT / "install.sh"),
+                    "--target",
+                    "claude",
+                    "--dest",
+                    "/tmp/project",
+                ],
                 cwd=REPO_ROOT,
                 env=env,
                 capture_output=True,

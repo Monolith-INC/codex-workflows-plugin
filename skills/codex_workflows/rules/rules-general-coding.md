@@ -18,6 +18,7 @@
 7. If modification is mandatory: strictly minimize mutation scope.
 
 ## III. Dart Strictness
+
 8. **Async Safety.** **Reject** `async` void methods (fire-and-forget) except for event handlers. **Must** use `Future<void>` and `await` calls.
 9. **Error Handling.** **Reject** silent failures. All `catch` blocks **must** either handle the error (recovery) or rethrow/log it. Empty catch blocks are prohibited.
 10. **Logging.** **Reject** `print()`. **Must** use `logging` package or `dart:developer.log`.

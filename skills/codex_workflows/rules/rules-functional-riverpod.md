@@ -7,13 +7,13 @@ Use this pattern when implementing Riverpod Notifiers that require complex state
 
 ## Principles
 
-1.  **Functional over Imperative**: Avoid `if/else` blocks. Use Dart 3 **Switch Expressions** for all branching logic.
-2.  **Immutability**: Avoid local mutable variables. Use functional pipelines to transform data.
-3.  **Self-Documenting Code**: Do not write comments explaining "what" the code does. The logic flow should be obvious from the structure.
-4.  **`fpdart` Integration**: Use `Option` types fornullable values or side-effect carriers (e.g., `Option<Timer>`).
-5.  **Side Effect Management**:
-    -   Use `ref.listen` to handle state transitions without rebuilding the provider.
-    -   Chain listeners using the cascade operator `..`.
+1. **Functional over Imperative**: Avoid `if/else` blocks. Use Dart 3 **Switch Expressions** for all branching logic.
+2. **Immutability**: Avoid local mutable variables. Use functional pipelines to transform data.
+3. **Self-Documenting Code**: Do not write comments explaining "what" the code does. The logic flow should be obvious from the structure.
+4. **`fpdart` Integration**: Use `Option` types fornullable values or side-effect carriers (e.g., `Option<Timer>`).
+5. **Side Effect Management**:
+    - Use `ref.listen` to handle state transitions without rebuilding the provider.
+    - Chain listeners using the cascade operator `..`.
 
 ## Example Implementation
 

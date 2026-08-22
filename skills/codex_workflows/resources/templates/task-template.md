@@ -37,7 +37,9 @@ creator: {CREATOR}
 ## Verification Plan
 
 ### Automated Tests
+
 - [ ] [Automated verification command / test file]
 
 ### Manual Verification
+
 - [ ] [Verification steps]

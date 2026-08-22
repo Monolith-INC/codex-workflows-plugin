@@ -11,6 +11,7 @@ Hooks are functions used inside widgets, designed as an alternative to `Stateful
 ## When to Use Hooks
 
 Hooks are helpful for:
+
 - Forms
 - Animations
 - Reacting to user events

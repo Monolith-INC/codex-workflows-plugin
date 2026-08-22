@@ -18,7 +18,15 @@ def _expected_cmd(script_name: str) -> str:
 class TestInstallerSmoke(unittest.TestCase):
     def _run_installer(self, target: str, output_path: Path) -> dict:
         completed = subprocess.run(
-            CLI + ["--target", target, "--profile", "generic", "--output", str(output_path)],
+            CLI
+            + [
+                "--target",
+                target,
+                "--profile",
+                "generic",
+                "--output",
+                str(output_path),
+            ],
             check=True,
             capture_output=True,
             text=True,
@@ -70,7 +78,9 @@ class TestInstallerSmoke(unittest.TestCase):
             result = self._run_installer("antigravity-cli", output_path)
 
             self.assertTrue(output_path.exists())
-            self.assertEqual(result["configPaths"], [".gemini/antigravity-cli/settings.json"])
+            self.assertEqual(
+                result["configPaths"], [".gemini/antigravity-cli/settings.json"]
+            )
             content = json.loads(output_path.read_text(encoding="utf-8"))
             self.assertEqual(
                 content["hooks"]["BeforeTool"][0]["hooks"][0]["command"],
@@ -108,8 +118,15 @@ class TestInstallerSmoke(unittest.TestCase):
         """When --dest is provided, .agent/workflows/ files are synced to the target."""
         with tempfile.TemporaryDirectory() as tempdir:
             completed = subprocess.run(
-                [sys.executable, "-m", "scripts.installer.cli",
-                 "--target", "gemini", "--dest", tempdir],
+                [
+                    sys.executable,
+                    "-m",
+                    "scripts.installer.cli",
+                    "--target",
+                    "gemini",
+                    "--dest",
+                    tempdir,
+                ],
                 check=True,
                 capture_output=True,
                 text=True,
@@ -117,16 +134,27 @@ class TestInstallerSmoke(unittest.TestCase):
             result = json.loads(completed.stdout)
             self.assertEqual(result["target"], "gemini")
             workflows_dir = Path(tempdir) / ".agent" / "workflows"
-            self.assertTrue(workflows_dir.is_dir(), "workflows dir should have been created")
+            self.assertTrue(
+                workflows_dir.is_dir(), "workflows dir should have been created"
+            )
             md_files = list(workflows_dir.glob("*.md"))
-            self.assertGreater(len(md_files), 0, "at least one workflow file should be synced")
+            self.assertGreater(
+                len(md_files), 0, "at least one workflow file should be synced"
+            )
 
     def test_install_with_dest_syncs_workflows_subdirectories(self):
         """When --dest is provided, workflows subdirectories (like templates/) are copied recursively."""
         with tempfile.TemporaryDirectory() as tempdir:
             completed = subprocess.run(
-                [sys.executable, "-m", "scripts.installer.cli",
-                 "--target", "gemini", "--dest", tempdir],
+                [
+                    sys.executable,
+                    "-m",
+                    "scripts.installer.cli",
+                    "--target",
+                    "gemini",
+                    "--dest",
+                    tempdir,
+                ],
                 check=True,
                 capture_output=True,
                 text=True,
@@ -134,36 +162,74 @@ class TestInstallerSmoke(unittest.TestCase):
             result = json.loads(completed.stdout)
             self.assertEqual(result["target"], "gemini")
             templates_dir = Path(tempdir) / ".agent" / "workflows" / "templates"
-            self.assertTrue(templates_dir.is_dir(), "templates subdirectory should have been copied")
+            self.assertTrue(
+                templates_dir.is_dir(), "templates subdirectory should have been copied"
+            )
             template_files = list(templates_dir.glob("*.md"))
-            self.assertGreater(len(template_files), 0, "template files should be present in synced templates dir")
+            self.assertGreater(
+                len(template_files),
+                0,
+                "template files should be present in synced templates dir",
+            )
 
     def test_install_with_dest_writes_target_config_in_place(self):
         """When --dest is provided, the hook config is written at the correct relative path."""
         with tempfile.TemporaryDirectory() as tempdir:
             subprocess.run(
-                [sys.executable, "-m", "scripts.installer.cli",
-                 "--target", "antigravity", "--dest", tempdir],
+                [
+                    sys.executable,
+                    "-m",
+                    "scripts.installer.cli",
+                    "--target",
+                    "antigravity",
+                    "--dest",
+                    tempdir,
+                ],
                 check=True,
                 capture_output=True,
                 text=True,
             )
             hooks_file = Path(tempdir) / ".agents" / "hooks.json"
-            self.assertTrue(hooks_file.exists(), ".agents/hooks.json should have been written")
+            self.assertTrue(
+                hooks_file.exists(), ".agents/hooks.json should have been written"
+            )
             content = json.loads(hooks_file.read_text(encoding="utf-8"))
             self.assertIn("codex-enforcer", content)
 
     def test_install_with_dest_writes_codex_claude_and_cursor_configs(self):
         cases = [
-            ("codex", ".codex/hooks.json", ("hooks", "PreToolUse", 0, "hooks", 0, "command"), "codex_enforce_hook.py"),
-            ("claude", ".claude/settings.json", ("hooks", "PreToolUse", 0, "hooks", 0, "command"), "claude_enforce_hook.py"),
-            ("cursor", ".cursor/hooks.json", ("hooks", "preToolUse", 0, "command"), "cursor_enforce_hook.py"),
+            (
+                "codex",
+                ".codex/hooks.json",
+                ("hooks", "PreToolUse", 0, "hooks", 0, "command"),
+                "codex_enforce_hook.py",
+            ),
+            (
+                "claude",
+                ".claude/settings.json",
+                ("hooks", "PreToolUse", 0, "hooks", 0, "command"),
+                "claude_enforce_hook.py",
+            ),
+            (
+                "cursor",
+                ".cursor/hooks.json",
+                ("hooks", "preToolUse", 0, "command"),
+                "cursor_enforce_hook.py",
+            ),
         ]
 
         for target, relative_path, command_path, script_name in cases:
             with self.subTest(target=target), tempfile.TemporaryDirectory() as tempdir:
                 completed = subprocess.run(
-                    [sys.executable, "-m", "scripts.installer.cli", "--target", target, "--dest", tempdir],
+                    [
+                        sys.executable,
+                        "-m",
+                        "scripts.installer.cli",
+                        "--target",
+                        target,
+                        "--dest",
+                        tempdir,
+                    ],
                     check=True,
                     capture_output=True,
                     text=True,

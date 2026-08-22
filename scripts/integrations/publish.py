@@ -9,8 +9,17 @@ from typing import Any
 from .contracts import ArtifactRef, IntegrationError
 
 
-def _find_existing(artifacts: list[ArtifactRef], *, title: str, revision: str) -> ArtifactRef | None:
-    return next((item for item in artifacts if item.revision == revision and item.title == title), None)
+def _find_existing(
+    artifacts: list[ArtifactRef], *, title: str, revision: str
+) -> ArtifactRef | None:
+    return next(
+        (
+            item
+            for item in artifacts
+            if item.revision == revision and item.title == title
+        ),
+        None,
+    )
 
 
 def publish_artifact_idempotent(
@@ -44,7 +53,11 @@ def publish_artifact_idempotent(
                 raise
             recovered = _find_existing(list_fn(), title=title, revision=revision)
             if recovered is not None:
-                return {"artifact": recovered, "outcome": "reused", "attempts": attempts}
+                return {
+                    "artifact": recovered,
+                    "outcome": "reused",
+                    "attempts": attempts,
+                }
             sleep_fn(0.05 * attempts)
     assert last_error is not None
     raise last_error

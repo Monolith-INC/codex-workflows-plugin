@@ -27,7 +27,7 @@ _PROJECT_MARKERS = (
     "build.gradle.kts",
     "composer.json",
     "Gemfile",
-    ".codex-plugin",
+    "codex-workflows-plugin.json",
 )
 
 _TARGET_CHOICES = (
@@ -42,6 +42,7 @@ _TARGET_CHOICES = (
 _TRACKER_CHOICES = (
     ("linear", "Linear (issues, projects, comments)"),
     ("azure_devops", "Azure DevOps Boards (work items)"),
+    ("local_tracker", "Local tracker (repository work-item records)"),
 )
 
 _SCM_CHOICES = (
@@ -66,6 +67,7 @@ class WizardAnswers:
     tracker: str = "linear"
     scm: str = "github"
     tracker_scope: str = ""
+    local_tracker_storage: str = "committed"
     branch_template: str = "{category}/{key}-{slug}"
     confirmed_mappings: dict | None = None
 
@@ -146,7 +148,9 @@ def _ask(io: WizardIO, prompt: str, *, default: str | None = None) -> str:
 def _ask_yes_no(io: WizardIO, prompt: str, *, default: bool = True) -> bool:
     default_token = "Y/n" if default else "y/N"
     while True:
-        answer = _ask(io, f"{prompt} ({default_token})", default="y" if default else "n").lower()
+        answer = _ask(
+            io, f"{prompt} ({default_token})", default="y" if default else "n"
+        ).lower()
         if answer in {"y", "yes"}:
             return True
         if answer in {"n", "no"}:
@@ -156,7 +160,9 @@ def _ask_yes_no(io: WizardIO, prompt: str, *, default: bool = True) -> bool:
         _print(io, "Please answer yes or no.")
 
 
-def _ask_choice(io: WizardIO, prompt: str, choices: list[tuple[str, str]], *, default: str) -> str:
+def _ask_choice(
+    io: WizardIO, prompt: str, choices: list[tuple[str, str]], *, default: str
+) -> str:
     _print(io, prompt)
     for index, (value, label) in enumerate(choices, start=1):
         marker = " (default)" if value == default else ""
@@ -222,14 +228,18 @@ def collect_answers(io: WizardIO, *, cwd: Path | None = None) -> WizardAnswers:
         looks_like, found = detect_software_project(candidate)
         if not looks_like:
             _print(io, f"No common project markers found under {candidate}.")
-            if not _ask_yes_no(io, "Continue with this destination anyway?", default=False):
+            if not _ask_yes_no(
+                io, "Continue with this destination anyway?", default=False
+            ):
                 continue
         else:
             _print(io, "Project markers: " + ", ".join(found))
         dest = candidate
 
     if mode == "uninstall":
-        keep_runtime = _ask_yes_no(io, "Keep the runtime directory (.codex-workflows)?", default=False)
+        keep_runtime = _ask_yes_no(
+            io, "Keep the runtime directory (.codex-workflows)?", default=False
+        )
         _print(io, "")
         _print(io, "Summary")
         _print(io, "  Action : uninstall")
@@ -246,12 +256,48 @@ def collect_answers(io: WizardIO, *, cwd: Path | None = None) -> WizardAnswers:
         default="all-agents",
     )
 
-    tracker = _ask_choice(io, "Which tracker should workflow operations use?", list(_TRACKER_CHOICES), default="linear")
-    tracker_scope = _ask(io, "Tracker workspace/project/team scope (optional; use auto to discover)", default="auto")
-    scm = _ask_choice(io, "Which SCM should handle pull requests?", list(_SCM_CHOICES), default="github")
-    branch_template = _ask_choice(io, "Choose the branch naming convention", list(_BRANCH_PRESETS), default=_BRANCH_PRESETS[0][0])
+    tracker = _ask_choice(
+        io,
+        "Which tracker should workflow operations use?",
+        list(_TRACKER_CHOICES),
+        default="linear",
+    )
+    tracker_scope = ""
+    local_tracker_storage = "committed"
+    if tracker == "local_tracker":
+        local_tracker_storage = _ask_choice(
+            io,
+            "How should local tracker records be stored?",
+            [
+                ("committed", "Commit records with the project (recommended)"),
+                ("ignored", "Keep records local to this checkout"),
+            ],
+            default="committed",
+        )
+    else:
+        tracker_scope = _ask(
+            io,
+            "Tracker workspace/project/team scope (optional; use auto to discover)",
+            default="auto",
+        )
+    scm = _ask_choice(
+        io,
+        "Which SCM should handle pull requests?",
+        list(_SCM_CHOICES),
+        default="github",
+    )
+    branch_template = _ask_choice(
+        io,
+        "Choose the branch naming convention",
+        list(_BRANCH_PRESETS),
+        default=_BRANCH_PRESETS[0][0],
+    )
     if branch_template == "other":
-        branch_template = _ask(io, "Custom branch template (must contain {key})", default="{category}/{key}-{slug}")
+        branch_template = _ask(
+            io,
+            "Custom branch template (must contain {key})",
+            default="{category}/{key}-{slug}",
+        )
 
     from scripts.integrations.discovery import mapping_presets
 
@@ -263,7 +309,9 @@ def collect_answers(io: WizardIO, *, cwd: Path | None = None) -> WizardAnswers:
     for key, value in (presets.get("states") or {}).items():
         _print(io, f"  state {key} -> {value}")
     if not _ask_yes_no(io, "Confirm these kind/state mappings?", default=True):
-        raise SystemExit("Cancelled. Re-run bootstrap after adjusting provider mappings.")
+        raise SystemExit(
+            "Cancelled. Re-run bootstrap after adjusting provider mappings."
+        )
 
     _print(io, "")
     _print(io, "Summary")
@@ -281,6 +329,7 @@ def collect_answers(io: WizardIO, *, cwd: Path | None = None) -> WizardAnswers:
         tracker=tracker,
         scm=scm,
         tracker_scope=tracker_scope,
+        local_tracker_storage=local_tracker_storage,
         branch_template=branch_template,
         confirmed_mappings=presets,
     )
@@ -304,7 +353,18 @@ def run_bootstrap(
             argv.append("--keep-runtime")
     else:
         argv.extend(["--target", answers.target])
-        argv.extend(["--tracker", answers.tracker, "--scm", answers.scm, "--branch-template", answers.branch_template])
+        argv.extend(
+            [
+                "--tracker",
+                answers.tracker,
+                "--scm",
+                answers.scm,
+                "--branch-template",
+                answers.branch_template,
+            ]
+        )
+        if answers.tracker == "local_tracker":
+            argv.extend(["--local-tracker-storage", answers.local_tracker_storage])
         if answers.tracker_scope:
             argv.extend(["--tracker-scope", answers.tracker_scope])
     if install_dir is not None:
@@ -323,7 +383,9 @@ def run_bootstrap(
             tracker = dict(payload.get("tracker") or {})
             tracker["mappings"] = answers.confirmed_mappings
             payload["tracker"] = tracker
-            config_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            config_path.write_text(
+                json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+            )
     return code
 
 
@@ -333,13 +395,24 @@ def verify_install(dest: Path, target: str) -> list[CheckResult]:
     runtime = dest / ".codex-workflows"
     checks: list[CheckResult] = []
 
-    def add(name: str, ok: bool, detail: str, *, remediable: bool = False, remedy_key: str | None = None) -> None:
-        checks.append(CheckResult(name, ok, detail, remediable=remediable, remedy_key=remedy_key))
+    def add(
+        name: str,
+        ok: bool,
+        detail: str,
+        *,
+        remediable: bool = False,
+        remedy_key: str | None = None,
+    ) -> None:
+        checks.append(
+            CheckResult(name, ok, detail, remediable=remediable, remedy_key=remedy_key)
+        )
 
     add(
         "python3",
         shutil.which("python3") is not None,
-        "python3 is on PATH" if shutil.which("python3") else "python3 not found on PATH",
+        "python3 is on PATH"
+        if shutil.which("python3")
+        else "python3 not found on PATH",
     )
 
     version = sys.version_info
@@ -357,11 +430,15 @@ def verify_install(dest: Path, target: str) -> list[CheckResult]:
         remediable=False,
     )
 
-    git_ok = (dest / ".git").exists() or _run_ok(["git", "-C", str(dest), "rev-parse", "--is-inside-work-tree"])
+    git_ok = (dest / ".git").exists() or _run_ok(
+        ["git", "-C", str(dest), "rev-parse", "--is-inside-work-tree"]
+    )
     add(
         "git-repo",
         git_ok,
-        "destination is a git work tree" if git_ok else "destination is not a git repository (ticket-start git checks need git)",
+        "destination is a git work tree"
+        if git_ok
+        else "destination is not a git repository (ticket-start git checks need git)",
     )
 
     add(
@@ -376,15 +453,17 @@ def verify_install(dest: Path, target: str) -> list[CheckResult]:
     add(
         "integration-config",
         integration_config.is_file(),
-        "tracker/SCM integration configuration present" if integration_config.is_file() else "integration configuration missing; run bootstrap selections",
+        "tracker/SCM integration configuration present"
+        if integration_config.is_file()
+        else "integration configuration missing; run bootstrap selections",
         remediable=True,
         remedy_key="rewire",
     )
 
     if integration_config.is_file():
         try:
-            from scripts.integrations.discovery import verify_integration_capabilities
             from scripts.integrations.config import load_config
+            from scripts.integrations.discovery import verify_integration_capabilities
 
             config = load_config(dest)
             payload = {
@@ -397,7 +476,9 @@ def verify_install(dest: Path, target: str) -> list[CheckResult]:
             add(
                 "integration-mappings",
                 not problems,
-                "bindings and mappings look complete" if not problems else "; ".join(problems[:3]),
+                "bindings and mappings look complete"
+                if not problems
+                else "; ".join(problems[:3]),
                 remediable=True,
                 remedy_key="rewire",
             )
@@ -418,11 +499,15 @@ def verify_install(dest: Path, target: str) -> list[CheckResult]:
                 remedy_key="rewire",
             )
 
-    hook_script = runtime / "skills" / "codex_workflows" / "scripts" / "claude_enforce_hook.py"
+    hook_script = (
+        runtime / "skills" / "codex_workflows" / "scripts" / "claude_enforce_hook.py"
+    )
     add(
         "runtime-hooks",
         hook_script.is_file(),
-        "hook entrypoints present" if hook_script.is_file() else f"missing {hook_script}",
+        "hook entrypoints present"
+        if hook_script.is_file()
+        else f"missing {hook_script}",
         remediable=True,
         remedy_key="rewire",
     )
@@ -461,7 +546,9 @@ def verify_install(dest: Path, target: str) -> list[CheckResult]:
         try:
             payload = json.loads(mcp_path.read_text(encoding="utf-8"))
             server = (payload.get("mcpServers") or {}).get("agentic-orchestrator") or {}
-            gateway = (payload.get("mcpServers") or {}).get("workflow-integrations") or {}
+            gateway = (payload.get("mcpServers") or {}).get(
+                "workflow-integrations"
+            ) or {}
             env = server.get("env") or {}
             orchestrator_ok = isinstance(server, dict) and bool(server.get("command"))
             gateway_ok = isinstance(gateway, dict) and bool(gateway.get("command"))
@@ -474,28 +561,36 @@ def verify_install(dest: Path, target: str) -> list[CheckResult]:
     add(
         "mcp-orchestrator",
         orchestrator_ok,
-        "agentic-orchestrator present in .mcp.json" if orchestrator_ok else ".mcp.json missing agentic-orchestrator",
+        "agentic-orchestrator present in .mcp.json"
+        if orchestrator_ok
+        else ".mcp.json missing agentic-orchestrator",
         remediable=True,
         remedy_key="rewire",
     )
     add(
         "mcp-integrations",
         gateway_ok,
-        "workflow-integrations present in .mcp.json" if gateway_ok else ".mcp.json missing workflow-integrations",
+        "workflow-integrations present in .mcp.json"
+        if gateway_ok
+        else ".mcp.json missing workflow-integrations",
         remediable=True,
         remedy_key="rewire",
     )
     add(
         "mcp-pythonpath",
         pythonpath_ok,
-        "ORCHESTRATOR PYTHONPATH exists" if pythonpath_ok else "ORCHESTRATOR PYTHONPATH missing or invalid",
+        "ORCHESTRATOR PYTHONPATH exists"
+        if pythonpath_ok
+        else "ORCHESTRATOR PYTHONPATH missing or invalid",
         remediable=True,
         remedy_key="rewire",
     )
     add(
         "mcp-skills-dir",
         skills_ok,
-        "ORCHESTRATOR_SKILLS_DIR exists" if skills_ok else "ORCHESTRATOR_SKILLS_DIR missing or invalid",
+        "ORCHESTRATOR_SKILLS_DIR exists"
+        if skills_ok
+        else "ORCHESTRATOR_SKILLS_DIR missing or invalid",
         remediable=True,
         remedy_key="rewire",
     )
@@ -531,7 +626,9 @@ def verify_install(dest: Path, target: str) -> list[CheckResult]:
     add(
         "cursor-mcp",
         cursor_mcp.is_file(),
-        ".cursor/mcp.json present" if cursor_mcp.is_file() else ".cursor/mcp.json missing",
+        ".cursor/mcp.json present"
+        if cursor_mcp.is_file()
+        else ".cursor/mcp.json missing",
         remediable=True,
         remedy_key="rewire",
     )
@@ -542,7 +639,10 @@ def verify_install(dest: Path, target: str) -> list[CheckResult]:
         try:
             payload = json.loads(claude_local.read_text(encoding="utf-8"))
             enabled = payload.get("enabledMcpjsonServers") or []
-            claude_ok = payload.get("enableAllProjectMcpServers") is True and "agentic-orchestrator" in enabled
+            claude_ok = (
+                payload.get("enableAllProjectMcpServers") is True
+                and "agentic-orchestrator" in enabled
+            )
         except json.JSONDecodeError:
             claude_ok = False
     add(
@@ -577,14 +677,22 @@ def report_checks(io: WizardIO, checks: list[CheckResult]) -> list[CheckResult]:
     _print(io, "")
     if not failed:
         _print(io, "All checks passed.")
-        _print(io, "Restart your agent session in this project so hooks and MCP reload.")
+        _print(
+            io, "Restart your agent session in this project so hooks and MCP reload."
+        )
     else:
         _print(io, f"{len(failed)} check(s) failed.")
         remediable = [check for check in failed if check.remediable]
         if remediable:
-            _print(io, "Some failures can be retried by re-running the installer wiring step.")
+            _print(
+                io,
+                "Some failures can be retried by re-running the installer wiring step.",
+            )
         else:
-            _print(io, "Remaining failures look like environment mismatches to fix manually.")
+            _print(
+                io,
+                "Remaining failures look like environment mismatches to fix manually.",
+            )
     return failed
 
 
@@ -603,7 +711,11 @@ def remediation_loop(
         if not failed:
             return 0
 
-        remediable = [check for check in failed if check.remediable and check.remedy_key == "rewire"]
+        remediable = [
+            check
+            for check in failed
+            if check.remediable and check.remedy_key == "rewire"
+        ]
         if remediable and _ask_yes_no(
             io,
             "Re-run install wiring for the failed checks?",
@@ -621,7 +733,10 @@ def remediation_loop(
         ):
             continue
 
-        _print(io, "Leaving installer. Fix the failed checks, then re-run install.sh if needed.")
+        _print(
+            io,
+            "Leaving installer. Fix the failed checks, then re-run install.sh if needed.",
+        )
         return 1
 
 
@@ -664,7 +779,9 @@ def run_wizard(
         if code != 0:
             _print(io, f"Install exited with status {code}.")
             if _ask_yes_no(io, "Run verification anyway?", default=True):
-                return remediation_loop(io, answers, zip_path=zip_path, install_dir=install_dir)
+                return remediation_loop(
+                    io, answers, zip_path=zip_path, install_dir=install_dir
+                )
             return code
         return remediation_loop(io, answers, zip_path=zip_path, install_dir=install_dir)
     except KeyboardInterrupt:
@@ -676,10 +793,16 @@ def run_wizard(
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Interactive installer for codex-workflows-plugin")
+    parser = argparse.ArgumentParser(
+        description="Interactive installer for codex-workflows-plugin"
+    )
     parser.add_argument("--zip", type=Path, default=None, help="Release zip path")
-    parser.add_argument("--install-dir", type=Path, default=None, help="Optional runtime install dir")
-    parser.add_argument("--cwd", type=Path, default=None, help="Override detection cwd (tests)")
+    parser.add_argument(
+        "--install-dir", type=Path, default=None, help="Optional runtime install dir"
+    )
+    parser.add_argument(
+        "--cwd", type=Path, default=None, help="Override detection cwd (tests)"
+    )
     args = parser.parse_args(argv)
     return run_wizard(zip_path=args.zip, install_dir=args.install_dir, cwd=args.cwd)
 

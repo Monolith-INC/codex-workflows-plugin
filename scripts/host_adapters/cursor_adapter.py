@@ -5,8 +5,12 @@ from typing import Any
 from policy.events import CanonicalToolEvent, PolicyDecision
 
 
-def parse_cursor_payload(payload: dict[str, Any], *, project_root: str, **_ignored: Any) -> CanonicalToolEvent:
-    tool_name = payload.get("tool_name") or payload.get("toolName") or payload.get("tool") or ""
+def parse_cursor_payload(
+    payload: dict[str, Any], *, project_root: str, **_ignored: Any
+) -> CanonicalToolEvent:
+    tool_name = (
+        payload.get("tool_name") or payload.get("toolName") or payload.get("tool") or ""
+    )
     tool_input = (
         payload.get("tool_input")
         or payload.get("toolInput")

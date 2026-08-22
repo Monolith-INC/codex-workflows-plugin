@@ -41,9 +41,12 @@ def extract_shell_write_targets(command: str) -> list[str]:
         return targets
 
     cmd = tokens[0].rsplit("/", 1)[-1]
-    if cmd in {"cp", "mv", "install", "touch", "truncate"} and len(tokens) >= 2:
-        if "Tickets/" not in command:
-            add(tokens[-1])
+    if (
+        cmd in {"cp", "mv", "install", "touch", "truncate"}
+        and len(tokens) >= 2
+        and "Tickets/" not in command
+    ):
+        add(tokens[-1])
 
     if cmd == "dd":
         for token in tokens[1:]:

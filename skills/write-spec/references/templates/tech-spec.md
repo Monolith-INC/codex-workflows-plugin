@@ -33,4 +33,3 @@ How to revert safely.
 ## Requirements (RFC 2119)
 
 Use MUST/SHOULD/MAY for normative statements.
-

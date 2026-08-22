@@ -29,14 +29,16 @@ creator: {CREATOR}
 
 ## Logs & Tracebacks
 
-```
+```text
 [Insert console logs, Firestore data, backend functions logs, or error stack traces here]
 ```
 
 ## Verification Plan
 
 ### Automated Tests
+
 - [ ] Reproduction test written and passing.
 
 ### Manual Verification
+
 - [ ] [Steps to verify the fix on simulator/device]

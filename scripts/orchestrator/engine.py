@@ -141,19 +141,27 @@ class OrchestratorEngine:
             for manifest in self._manifests.values()
         ]
 
-    def run_tool_call(self, name: str, arguments: dict[str, Any] | None) -> ToolCallResult:
+    def run_tool_call(
+        self, name: str, arguments: dict[str, Any] | None
+    ) -> ToolCallResult:
         arguments = arguments or {}
         manifest = self._manifests.get(name)
         if manifest is None:
-            return ToolCallResult(ok=False, output=None, error=f"Unknown skill '{name}'")
+            return ToolCallResult(
+                ok=False, output=None, error=f"Unknown skill '{name}'"
+            )
 
         input_critiques = validate_inputs(arguments, manifest)
         if input_critiques:
-            return ToolCallResult(ok=False, output=None, error="; ".join(input_critiques))
+            return ToolCallResult(
+                ok=False, output=None, error="; ".join(input_critiques)
+            )
 
         task_id = f"{name}-{uuid.uuid4().hex[:8]}"
         task = Task(id=task_id, skill_name=name, inputs=arguments)
-        stream = OrchestratorStream(QueueState(tasks={task_id: task}), max_retries=self.max_retries)
+        stream = OrchestratorStream(
+            QueueState(tasks={task_id: task}), max_retries=self.max_retries
+        )
         self._subscribe_hooks(stream)
         stream.dispatch(Event(type="TaskSpawnedEvent", payload={"task_id": task_id}))
 
@@ -215,9 +223,17 @@ class OrchestratorEngine:
             output = run.to_wire()
             if not critiques:
                 stream.dispatch(
-                    Event(type="TaskCompletedEvent", payload={"task_id": task_id, "output": output})
+                    Event(
+                        type="TaskCompletedEvent",
+                        payload={"task_id": task_id, "output": output},
+                    )
                 )
-                return ToolCallResult(ok=True, output=output, task_id=task_id, state=TaskState.COMPLETED.value)
+                return ToolCallResult(
+                    ok=True,
+                    output=output,
+                    task_id=task_id,
+                    state=TaskState.COMPLETED.value,
+                )
 
             signature = progress_signature(run.product, manifest.outputs)
             stalled = _stalled(context, signature, critiques)

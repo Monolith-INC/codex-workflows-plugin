@@ -1,0 +1,20 @@
+{
+  "config": {
+    "default": true,
+    "MD013": false,
+    "MD029": false,
+    "MD033": false,
+    "MD003": { "style": "atx" },
+    "MD046": { "style": "fenced" },
+    "MD025": { "front_matter_title": "^document_title:" }
+  },
+  "globs": [
+    "README.md",
+    "CHANGELOG.md",
+    "CLAUDE.md",
+    ".github/**/*.md",
+    "commands/**/*.md",
+    "docs/**/*.md",
+    "skills/**/*.md"
+  ]
+}

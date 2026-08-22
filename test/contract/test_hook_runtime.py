@@ -1,4 +1,6 @@
+import json
 import sys
+import tempfile
 import unittest
 from contextlib import redirect_stdout
 from io import StringIO
@@ -11,7 +13,7 @@ for path in (ROOT, SCRIPTS_DIR):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
 
-from adapters import (
+from host_adapters import (
     format_antigravity_decision,
     format_claude_decision,
     format_codex_decision,
@@ -27,6 +29,7 @@ from policy.git_branch_guard import evaluate_git_branch_guard
 
 from scripts import hook_runtime
 from scripts.hook_runtime import select_adapter
+from scripts.policy import CanonicalToolEvent
 
 
 class TestHookRuntime(unittest.TestCase):
@@ -69,6 +72,41 @@ class TestHookRuntime(unittest.TestCase):
         ):
             decision = evaluate_git_branch_guard("git commit -m 'x'", "/tmp/repo")
         self.assertTrue(decision.is_denied())
+
+    def test_skipped_tracking_bypasses_ticket_context_checks_but_not_git_guards(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            config_path = root / ".codex-workflows" / "integrations.json"
+            config_path.parent.mkdir()
+            config_path.write_text(
+                json.dumps(
+                    {
+                        "schemaVersion": 1,
+                        "branchTemplate": "{category}/{key}-{slug}",
+                        "tracking": {"mode": "skipped"},
+                        "tracker": {"adapter": "local_tracker", "bindings": {}},
+                        "scm": {"adapter": "github", "connection": {}},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            event = CanonicalToolEvent(
+                client="codex", tool_name="Write", workspace_root=str(root)
+            )
+            self.assertFalse(hook_runtime.evaluate_event(event).is_denied())
+            with mock.patch(
+                "policy.git_branch_guard._run_git_cmd", return_value="main"
+            ):
+                self.assertTrue(
+                    hook_runtime.evaluate_event(
+                        CanonicalToolEvent(
+                            client="codex",
+                            tool_name="Bash",
+                            command="git commit -m test",
+                            workspace_root=str(root),
+                        )
+                    ).is_denied()
+                )
 
 
 if __name__ == "__main__":

@@ -1,0 +1,11 @@
+{
+  "name": "codex-workflows-plugin-quality",
+  "private": true,
+  "scripts": {
+    "lint:markdown": "markdownlint-cli2",
+    "fix:markdown": "markdownlint-cli2 --fix"
+  },
+  "devDependencies": {
+    "markdownlint-cli2": "0.23.2"
+  }
+}

@@ -37,7 +37,9 @@ def evaluate_git_branch_guard(command: str, workspace_root: str) -> PolicyDecisi
     if argv is None:
         return PolicyDecision.allow()
 
-    current = (_run_git_cmd(["git", "branch", "--show-current"], workspace_root) or "").strip()
+    current = (
+        _run_git_cmd(["git", "branch", "--show-current"], workspace_root) or ""
+    ).strip()
     sub = argv[0] if argv else ""
 
     if sub in _CHECKOUT_SWITCH:
@@ -61,7 +63,13 @@ def is_ticket_branch(name: str | None) -> bool:
 
 
 def _evaluate_checkout_switch(argv: list[str], current: str) -> PolicyDecision:
-    creating = "-b" in argv or "-B" in argv or "-c" in argv or "-C" in argv or "--create" in argv
+    creating = (
+        "-b" in argv
+        or "-B" in argv
+        or "-c" in argv
+        or "-C" in argv
+        or "--create" in argv
+    )
     target = _checkout_target(argv)
 
     if creating:
@@ -79,10 +87,9 @@ def _evaluate_checkout_switch(argv: list[str], current: str) -> PolicyDecision:
             "Stay on (or create) a ticket branch for implementation work."
         )
 
-    if current in PROTECTED_BRANCHES and not target:
-        # e.g. git checkout -- file  (path restore) — allow
-        if "--" in argv:
-            return PolicyDecision.allow()
+    # e.g. git checkout -- file  (path restore) — allow
+    if current in PROTECTED_BRANCHES and not target and "--" in argv:
+        return PolicyDecision.allow()
 
     return PolicyDecision.allow()
 
@@ -97,7 +104,9 @@ def _git_argv(command: str) -> list[str] | None:
 
     # Handle `git -C path ...` and env prefixes lightly: find first bare `git`.
     try:
-        idx = next(i for i, tok in enumerate(tokens) if tok == "git" or tok.endswith("/git"))
+        idx = next(
+            i for i, tok in enumerate(tokens) if tok == "git" or tok.endswith("/git")
+        )
     except StopIteration:
         return None
 

@@ -29,4 +29,3 @@ Given/When/Then or measurable checks.
 ## Traceability
 
 Map requirements to tests and components.
-

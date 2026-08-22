@@ -22,6 +22,25 @@ class LogicalState(str, Enum):
 
 
 @dataclass(frozen=True)
+class WorkItemRole:
+    """A workflow role and the kinds it may directly contain."""
+
+    kind: WorkItemKind
+    child_kinds: frozenset[WorkItemKind]
+
+
+EPIC = WorkItemRole(WorkItemKind.EPIC, frozenset({WorkItemKind.FEATURE}))
+FEATURE = WorkItemRole(
+    WorkItemKind.FEATURE,
+    frozenset({WorkItemKind.USER_STORY, WorkItemKind.BUG}),
+)
+USER_STORY = WorkItemRole(WorkItemKind.USER_STORY, frozenset({WorkItemKind.TASK}))
+TASK = WorkItemRole(WorkItemKind.TASK, frozenset())
+BUG = WorkItemRole(WorkItemKind.BUG, frozenset({WorkItemKind.TASK}))
+WORK_ITEM_ROLES = {role.kind: role for role in (EPIC, FEATURE, USER_STORY, TASK, BUG)}
+
+
+@dataclass(frozen=True)
 class WorkItem:
     id: str
     key: str

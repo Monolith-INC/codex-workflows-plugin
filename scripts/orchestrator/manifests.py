@@ -80,17 +80,23 @@ def parse_manifest(data: Any, path: str | Path) -> ManifestParse:
         return ManifestDiagnostic(manifest_path, code, message)
 
     if not isinstance(data, dict):
-        return ManifestRejected((reject("root_not_object", "Manifest root must be an object."),))
+        return ManifestRejected(
+            (reject("root_not_object", "Manifest root must be an object."),)
+        )
 
     diagnostics: tuple[ManifestDiagnostic, ...] = ()
 
     name = data.get("name")
     if not isinstance(name, str) or not name.strip():
-        diagnostics += (reject("invalid_name", "Manifest name must be a non-empty string."),)
+        diagnostics += (
+            reject("invalid_name", "Manifest name must be a non-empty string."),
+        )
 
     description = data.get("description")
     if description is not None and not isinstance(description, str):
-        diagnostics += (reject("invalid_description", "Manifest description must be a string."),)
+        diagnostics += (
+            reject("invalid_description", "Manifest description must be a string."),
+        )
 
     contracts: dict[str, ValueContract] = {}
     for field_name in ("input_schema", "output_signature"):

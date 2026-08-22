@@ -9,6 +9,7 @@ from pathlib import Path
 from scripts.installer.bootstrap import (
     _codex_mcp_server_config,
     _default_tracker_config,
+    configure_integrations,
     default_install_dir,
     install_from_source,
     install_from_zip,
@@ -30,12 +31,18 @@ class TestInstallFromSource(unittest.TestCase):
 
         self.assertTrue((self.dest / "scripts").is_dir())
         self.assertTrue((self.dest / "skills").is_dir())
-        self.assertTrue((self.dest / ".codex-plugin").is_dir())
+        self.assertFalse((self.dest / ".codex-plugin").exists())
 
     def test_copies_hook_entrypoints(self):
         install_from_source(PLUGIN_ROOT, self.dest)
 
-        hook = self.dest / "skills" / "codex_workflows" / "scripts" / "antigravity_enforce_hook.py"
+        hook = (
+            self.dest
+            / "skills"
+            / "codex_workflows"
+            / "scripts"
+            / "antigravity_enforce_hook.py"
+        )
         self.assertTrue(hook.exists())
 
     def test_copies_policy_engine(self):
@@ -68,42 +75,115 @@ class TestInstallFromSource(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         output = json.loads(result.stdout)
-        cmd = output["mergedConfig"]["codex-enforcer"]["PreToolUse"][0]["hooks"][0]["command"]
-        self.assertIn(str(self.dest), cmd, "hook command should reference the installed dest, not the source repo")
+        cmd = output["mergedConfig"]["codex-enforcer"]["PreToolUse"][0]["hooks"][0][
+            "command"
+        ]
+        self.assertIn(
+            str(self.dest),
+            cmd,
+            "hook command should reference the installed dest, not the source repo",
+        )
 
     def test_copies_commands_dir(self):
         install_from_source(PLUGIN_ROOT, self.dest)
 
         self.assertTrue((self.dest / "commands" / "review-pr.md").exists())
+        self.assertTrue((self.dest / "commands" / "skip-tracker.md").exists())
+        self.assertTrue(
+            (
+                self.dest
+                / "skills"
+                / "codex_workflows"
+                / "resources"
+                / "templates"
+                / "epic-template.md"
+            ).exists()
+        )
+
+    def test_local_tracker_bootstrap_creates_committed_or_ignored_layout(self):
+        committed = Path(tempfile.mkdtemp())
+        ignored = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, committed)
+        self.addCleanup(shutil.rmtree, ignored)
+        configure_integrations(
+            committed,
+            tracker="local_tracker",
+            scm="github",
+            branch_template="{category}/{key}-{slug}",
+            discover=False,
+        )
+        config = json.loads(
+            (committed / ".codex-workflows" / "integrations.json").read_text()
+        )
+        self.assertEqual(config["tracker"]["storagePolicy"], "committed")
+        for state in (
+            "backlog",
+            "ready",
+            "in_progress",
+            "done",
+            "canceled",
+            "artifacts",
+        ):
+            self.assertTrue((committed / ".local-tracker" / state).is_dir())
+        self.assertFalse((committed / ".gitignore").exists())
+
+        config_path = configure_integrations(
+            ignored,
+            tracker="local_tracker",
+            scm="github",
+            branch_template="{category}/{key}-{slug}",
+            discover=False,
+        )
+        payload = json.loads(config_path.read_text())
+        payload["tracker"]["storagePolicy"] = "ignored"
+        config_path.write_text(json.dumps(payload), encoding="utf-8")
+        from scripts.installer.bootstrap import _initialize_local_tracker
+
+        _initialize_local_tracker(ignored, payload["tracker"])
+        self.assertIn(".local-tracker/", (ignored / ".gitignore").read_text())
 
 
 class TestSyncHostDiscoveryAssets(unittest.TestCase):
     def test_syncs_claude_and_agents_skills_and_commands(self):
-        with tempfile.TemporaryDirectory() as plugin, tempfile.TemporaryDirectory() as project:
+        with (
+            tempfile.TemporaryDirectory() as plugin,
+            tempfile.TemporaryDirectory() as project,
+        ):
             root = Path(plugin)
             (root / "skills" / "demo-skill").mkdir(parents=True)
-            (root / "skills" / "demo-skill" / "SKILL.md").write_text("# demo\n", encoding="utf-8")
+            (root / "skills" / "demo-skill" / "SKILL.md").write_text(
+                "# demo\n", encoding="utf-8"
+            )
             (root / "commands").mkdir()
             (root / "commands" / "demo.md").write_text("# demo cmd\n", encoding="utf-8")
 
             dest = Path(project)
             sync_host_discovery_assets(dest, root)
 
-            self.assertTrue((dest / ".claude" / "skills" / "demo-skill" / "SKILL.md").exists())
-            self.assertTrue((dest / ".agents" / "skills" / "demo-skill" / "SKILL.md").exists())
+            self.assertTrue(
+                (dest / ".claude" / "skills" / "demo-skill" / "SKILL.md").exists()
+            )
+            self.assertTrue(
+                (dest / ".agents" / "skills" / "demo-skill" / "SKILL.md").exists()
+            )
             self.assertTrue((dest / ".claude" / "commands" / "demo.md").exists())
 
 
 class TestSyncSharedAssets(unittest.TestCase):
     def test_syncs_markdown_and_typescript_rules(self):
-        with tempfile.TemporaryDirectory() as plugin, tempfile.TemporaryDirectory() as project:
+        with (
+            tempfile.TemporaryDirectory() as plugin,
+            tempfile.TemporaryDirectory() as project,
+        ):
             root = Path(plugin)
             rules = root / ".agent" / "rules"
             workflows = root / ".agent" / "workflows"
             rules.mkdir(parents=True)
             workflows.mkdir(parents=True)
             (rules / "rules-demo.md").write_text("# md\n", encoding="utf-8")
-            (rules / "rules-demo.ts").write_text("export const rules = [] as const;\n", encoding="utf-8")
+            (rules / "rules-demo.ts").write_text(
+                "export const rules = [] as const;\n", encoding="utf-8"
+            )
             (workflows / "workflows-demo.md").write_text("# wf\n", encoding="utf-8")
 
             dest = Path(project)
@@ -111,7 +191,9 @@ class TestSyncSharedAssets(unittest.TestCase):
 
             self.assertTrue((dest / ".agent" / "rules" / "rules-demo.md").exists())
             self.assertTrue((dest / ".agent" / "rules" / "rules-demo.ts").exists())
-            self.assertTrue((dest / ".agent" / "workflows" / "workflows-demo.md").exists())
+            self.assertTrue(
+                (dest / ".agent" / "workflows" / "workflows-demo.md").exists()
+            )
 
 
 class TestInstallFromZip(unittest.TestCase):
@@ -131,15 +213,25 @@ class TestInstallFromZip(unittest.TestCase):
         return zip_path
 
     def test_extracts_zip_contents(self):
-        zip_path = self._make_zip({
-            "scripts/hook_runtime.py": "# runtime",
-            "skills/codex_workflows/scripts/antigravity_enforce_hook.py": "# hook",
-            ".codex-plugin/plugin.json": json.dumps({"name": "test"}),
-        })
+        zip_path = self._make_zip(
+            {
+                "scripts/hook_runtime.py": "# runtime",
+                "skills/codex_workflows/scripts/antigravity_enforce_hook.py": "# hook",
+                "codex-workflows-plugin.json": json.dumps({"name": "test"}),
+            }
+        )
         install_from_zip(zip_path, self.dest)
 
         self.assertTrue((self.dest / "scripts" / "hook_runtime.py").exists())
-        self.assertTrue((self.dest / "skills" / "codex_workflows" / "scripts" / "antigravity_enforce_hook.py").exists())
+        self.assertTrue(
+            (
+                self.dest
+                / "skills"
+                / "codex_workflows"
+                / "scripts"
+                / "antigravity_enforce_hook.py"
+            ).exists()
+        )
 
     def test_replaces_existing_install(self):
         (self.dest / "stale.txt").write_text("stale")
@@ -166,6 +258,35 @@ class TestInstallCLI(unittest.TestCase):
         self.assertNotEqual(code, 0)
         self.assertIn("--dest", output)
 
+    def test_local_tracker_cli_applies_ignored_storage_policy(self):
+        with tempfile.TemporaryDirectory() as dest:
+            project = Path(dest)
+            code, output = self._run(
+                "--dest",
+                str(project),
+                "--target",
+                "claude",
+                "--tracker",
+                "local_tracker",
+                "--local-tracker-storage",
+                "ignored",
+                "--scm",
+                "github",
+                "--skip-discovery",
+            )
+            self.assertEqual(code, 0, output)
+            payload = json.loads(
+                (project / ".codex-workflows" / "integrations.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            self.assertEqual(payload["tracker"]["storagePolicy"], "ignored")
+            self.assertIn(
+                ".local-tracker/",
+                (project / ".gitignore").read_text(encoding="utf-8"),
+            )
+            self.assertTrue((project / ".local-tracker" / "backlog").is_dir())
+
     def test_missing_zip_returns_error(self):
         with tempfile.TemporaryDirectory() as dest:
             code, output = self._run("/nonexistent/plugin.zip", "--dest", dest)
@@ -188,11 +309,22 @@ class TestInstallCLI(unittest.TestCase):
         import os
         import subprocess
 
-        with tempfile.TemporaryDirectory() as temp_home, tempfile.TemporaryDirectory() as dest:
+        with (
+            tempfile.TemporaryDirectory() as temp_home,
+            tempfile.TemporaryDirectory() as dest,
+        ):
             home = Path(temp_home)
             project = Path(dest)
             result = subprocess.run(
-                [sys.executable, "-m", "scripts.installer.bootstrap", "--dest", str(project), "--target", "all-agents"],
+                [
+                    sys.executable,
+                    "-m",
+                    "scripts.installer.bootstrap",
+                    "--dest",
+                    str(project),
+                    "--target",
+                    "all-agents",
+                ],
                 capture_output=True,
                 text=True,
                 env={**os.environ, "HOME": str(home)},
@@ -201,7 +333,9 @@ class TestInstallCLI(unittest.TestCase):
             self.assertFalse((home / ".claude" / "settings.json").exists())
             self.assertFalse((home / ".cursor" / "hooks.json").exists())
             self.assertFalse((home / ".codex-workflows").exists())
-            self.assertFalse((home / ".claude" / "plugins" / "installed_plugins.json").exists())
+            self.assertFalse(
+                (home / ".claude" / "plugins" / "installed_plugins.json").exists()
+            )
             self.assertTrue((project / ".claude" / "settings.json").exists())
             self.assertTrue((project / ".cursor" / "hooks.json").exists())
 
@@ -209,7 +343,10 @@ class TestInstallCLI(unittest.TestCase):
         import os
         import subprocess
 
-        with tempfile.TemporaryDirectory() as temp_home, tempfile.TemporaryDirectory() as dest:
+        with (
+            tempfile.TemporaryDirectory() as temp_home,
+            tempfile.TemporaryDirectory() as dest,
+        ):
             home = Path(temp_home)
             project = Path(dest)
             mcp_path = project / ".mcp.json"
@@ -233,7 +370,11 @@ class TestInstallCLI(unittest.TestCase):
                         "mcpServers": {
                             "azure-devops": {
                                 "command": "npx",
-                                "args": ["-y", "@azure-devops/mcp", "bhave-tecnologia-comportamental"],
+                                "args": [
+                                    "-y",
+                                    "@azure-devops/mcp",
+                                    "bhave-tecnologia-comportamental",
+                                ],
                             },
                             "agile-workflow-orchestrator": {
                                 "command": "/usr/bin/python3",
@@ -250,7 +391,15 @@ class TestInstallCLI(unittest.TestCase):
             )
 
             result = subprocess.run(
-                [sys.executable, "-m", "scripts.installer.bootstrap", "--dest", str(project), "--target", "claude"],
+                [
+                    sys.executable,
+                    "-m",
+                    "scripts.installer.bootstrap",
+                    "--dest",
+                    str(project),
+                    "--target",
+                    "claude",
+                ],
                 capture_output=True,
                 text=True,
                 env={**os.environ, "HOME": str(home)},
@@ -259,7 +408,10 @@ class TestInstallCLI(unittest.TestCase):
 
             config = (project / ".codex" / "config.toml").read_text(encoding="utf-8")
             self.assertIn("[mcp_servers.azure-devops]", config)
-            self.assertIn('args = ["-y", "@azure-devops/mcp", "bhave-tecnologia-comportamental"]', config)
+            self.assertIn(
+                'args = ["-y", "@azure-devops/mcp", "bhave-tecnologia-comportamental"]',
+                config,
+            )
             self.assertIn(
                 'env_vars = ["DISPLAY", "WAYLAND_DISPLAY", "XAUTHORITY", "DBUS_SESSION_BUS_ADDRESS", "XDG_RUNTIME_DIR", "BROWSER"]',
                 config,
@@ -270,7 +422,10 @@ class TestInstallCLI(unittest.TestCase):
             self.assertIn("[mcp_servers.agile-workflow-orchestrator.env]", config)
             self.assertIn(f'CODEX_PROJECT_ROOT = "{project}"', config)
             self.assertIn("[mcp_servers.agentic-orchestrator.env]", config)
-            self.assertIn(f'ORCHESTRATOR_SKILLS_DIR = "{project / ".codex-workflows" / "skills"}"', config)
+            self.assertIn(
+                f'ORCHESTRATOR_SKILLS_DIR = "{project / ".codex-workflows" / "skills"}"',
+                config,
+            )
 
     def test_codex_azure_browser_env_is_added_only_for_interactive_auth(self):
         interactive = _codex_mcp_server_config(
@@ -311,7 +466,9 @@ class TestInstallCLI(unittest.TestCase):
         self.assertEqual(config["bindings"]["create_work_item"], "save_issue")
         self.assertEqual(config["bindings"]["transition_work_item"], "save_issue")
         self.assertEqual(config["bindings"]["publish_artifact"], "save_comment")
-        self.assertEqual(config["bindings"]["link_development_artifact"], "save_comment")
+        self.assertEqual(
+            config["bindings"]["link_development_artifact"], "save_comment"
+        )
 
 
 class TestStandaloneBootstrapZipInstall(unittest.TestCase):
@@ -335,7 +492,9 @@ class TestStandaloneBootstrapZipInstall(unittest.TestCase):
 
             bootstrap_path = root / "bootstrap.py"
             with zipfile.ZipFile(zip_path) as archive:
-                bootstrap_path.write_bytes(archive.read("scripts/installer/bootstrap.py"))
+                bootstrap_path.write_bytes(
+                    archive.read("scripts/installer/bootstrap.py")
+                )
 
             result = subprocess.run(
                 [
@@ -353,7 +512,9 @@ class TestStandaloneBootstrapZipInstall(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             runtime = default_install_dir(project)
-            self.assertTrue((runtime / "scripts" / "installer" / "bootstrap.py").exists())
+            self.assertTrue(
+                (runtime / "scripts" / "installer" / "bootstrap.py").exists()
+            )
             self.assertTrue((project / ".claude" / "settings.json").exists())
             self.assertNotIn("ModuleNotFoundError", result.stderr)
             self.assertNotIn("No module named 'scripts'", result.stdout + result.stderr)

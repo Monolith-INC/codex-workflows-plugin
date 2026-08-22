@@ -3,12 +3,15 @@
 **CRITICAL MANDATE:** You MUST write all Dart code using a strict functional programming paradigm by default. Apply these rules autonomously to all code generation and refactoring tasks.
 
 ## 🚫 PROHIBITED PATTERNS (NEVER USE)
+
 1. **No Imperative Branching:** NEVER use imperative `if/else` code blocks for control flow. You MUST use Dart's native pattern matching (`switch` expressions) or functional mapping.
 2. **No Variable Mutation/Declarations:** Avoid intermediate variable declarations. Rely on function chaining, expression bodies, and data transformations.
 3. **No Void Functions:** Avoid writing functions that do not return a value. Side-effects must be extremely rare, heavily isolated, and only used when absolutely inevitable.
 
 ## ✅ REQUIRED LIBRARIES & PATTERNS (ALWAYS USE)
+
 You must extensively leverage modern Dart features and the **Dartz** package:
+
 1. **Async Operations:** ALWAYS encapsulate asynchronous operations using `Task` from the Dartz package.
 2. **Null Safety:** ALWAYS handle nullable return values using `Option` from the Dartz package rather than native null checks.
 3. **Error Handling:** Use `Either` for success/failure flows to avoid throwing and catching exceptions imperatively.
@@ -16,6 +19,7 @@ You must extensively leverage modern Dart features and the **Dartz** package:
 5. **Pure Functions:** Default to writing pure, deterministic functions.
 
 ## 📖 REFERENCE IMPLEMENTATION
+
 *Observe how async operations are chained via `Task` and `attempt()`, and how lists are transformed without intermediate variables or loops.*
 
 ```dart

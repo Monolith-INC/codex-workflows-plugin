@@ -17,14 +17,15 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Validate Codex plugin
-        run: python3 scripts/validate_plugin.py .
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
 
-      - name: Install type checker
-        run: python3 -m pip install --quiet mypy
+      - name: Install quality tools
+        run: |
+          python3 -m pip install --quiet -r requirements-dev.txt
+          npm ci
 
-      - name: Type-check the orchestrator
-        run: python3 -m mypy
-
-      - name: Run tests
-        run: python3 -m unittest -v
+      - name: Run quality gates
+        run: python3 scripts/quality.py check

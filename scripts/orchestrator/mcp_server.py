@@ -59,7 +59,10 @@ def process_message(line: str, engine: OrchestratorEngine) -> str:
         elif method == "notifications/initialized":
             return ""
         else:
-            response["error"] = {"code": -32601, "message": f"Method not found: {method}"}
+            response["error"] = {
+                "code": -32601,
+                "message": f"Method not found: {method}",
+            }
     except Exception as exc:
         response["error"] = {"code": -32603, "message": str(exc)}
 

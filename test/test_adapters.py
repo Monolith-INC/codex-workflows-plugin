@@ -13,22 +13,22 @@ class TestAdapters(unittest.TestCase):
     def setUp(self):
         self.instructions = "You must analyze the AST."
         self.task = Task(
-            id="task_1", 
+            id="task_1",
             skill_name="ast_parser",
             state=TaskState.READY,
-            inputs={"file_path": "main.py"}
+            inputs={"file_path": "main.py"},
         )
         self.task_with_critiques = self.task.copy_with(
             critiques=["Failed to identify class names.", "Missed imports."]
         )
-        
+
         self.manifest = {
             "name": "ast_parser",
             "description": "Parses python AST.",
             "input_schema": {
                 "type": "object",
-                "properties": {"file_path": {"type": "string"}}
-            }
+                "properties": {"file_path": {"type": "string"}},
+            },
         }
 
     def test_anthropic_dialect(self):
@@ -38,7 +38,9 @@ class TestAdapters(unittest.TestCase):
         self.assertIn("<task_payload>", result)
         self.assertIn('"file_path": "main.py"', result)
         self.assertIn("<reflection>", result)
-        self.assertIn("<critique index=\"0\">Failed to identify class names.</critique>", result)
+        self.assertIn(
+            '<critique index="0">Failed to identify class names.</critique>', result
+        )
 
     def test_openai_dialect(self):
         result = to_openai_dialect(self.instructions, self.task_with_critiques)
@@ -61,5 +63,6 @@ class TestAdapters(unittest.TestCase):
         self.assertEqual(tool["function"]["name"], "ast_parser")
         self.assertIn("properties", tool["function"]["parameters"])
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()

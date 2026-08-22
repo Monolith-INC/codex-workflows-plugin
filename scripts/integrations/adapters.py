@@ -31,33 +31,48 @@ class TrackerAdapter(ABC):
     def get_work_item(self, ref: str) -> WorkItem: ...
 
     @abstractmethod
-    def search_work_items(self, query: str, cursor: str | None = None) -> dict[str, Any]: ...
+    def search_work_items(
+        self, query: str, cursor: str | None = None
+    ) -> dict[str, Any]: ...
 
     @abstractmethod
-    def create_work_item(self, kind: str, title: str, description: str, parent_ref: str | None = None) -> WorkItem: ...
+    def create_work_item(
+        self, kind: str, title: str, description: str, parent_ref: str | None = None
+    ) -> WorkItem: ...
 
     @abstractmethod
     def transition_work_item(self, ref: str, state: str) -> WorkItem: ...
 
     @abstractmethod
-    def publish_artifact(self, ref: str, kind: str, title: str, content: str, revision: str) -> ArtifactRef: ...
+    def publish_artifact(
+        self, ref: str, kind: str, title: str, content: str, revision: str
+    ) -> ArtifactRef: ...
 
     @abstractmethod
-    def list_artifacts(self, ref: str, kind: str | None = None) -> list[ArtifactRef]: ...
+    def list_artifacts(
+        self, ref: str, kind: str | None = None
+    ) -> list[ArtifactRef]: ...
 
     def list_children(self, ref: str) -> list[WorkItem]:
         result = self._call("list_children", {"parent": ref})
         return [_work_item(item, self.mappings) for item in _items(result)]
 
-    def link_development_artifact(self, ref: str, artifact_url: str, artifact_type: str = "pull_request") -> dict[str, Any]:
-        return self._call("link_development_artifact", {"work_item": ref, "url": artifact_url, "type": artifact_type})
+    def link_development_artifact(
+        self, ref: str, artifact_url: str, artifact_type: str = "pull_request"
+    ) -> dict[str, Any]:
+        return self._call(
+            "link_development_artifact",
+            {"work_item": ref, "url": artifact_url, "type": artifact_type},
+        )
 
     def resolve_branch_key(self, branch: str) -> str | None:
         pattern = self.config.get("branchPattern") or self.config.get("branch_template")
         if not isinstance(pattern, str):
             return None
         escaped = re.escape(pattern)
-        escaped = escaped.replace(re.escape("{key}"), r"(?P<key>[A-Za-z][A-Za-z0-9_-]*-?[0-9]+|[0-9]+)")
+        escaped = escaped.replace(
+            re.escape("{key}"), r"(?P<key>[A-Za-z][A-Za-z0-9_-]*-?[0-9]+|[0-9]+)"
+        )
         escaped = escaped.replace(re.escape("{category}"), r"[A-Za-z0-9_-]+")
         escaped = escaped.replace(re.escape("{slug}"), r"[A-Za-z0-9_-]+")
         escaped = escaped.replace(re.escape("{user}"), r"[A-Za-z0-9_-]+")
@@ -67,7 +82,10 @@ class TrackerAdapter(ABC):
     def _call(self, operation: str, arguments: dict[str, Any]) -> Any:
         tool = self.bindings.get(operation)
         if not isinstance(tool, str) or not tool:
-            raise IntegrationError("unsupported_capability", f"Tracker operation is not configured: {operation}")
+            raise IntegrationError(
+                "unsupported_capability",
+                f"Tracker operation is not configured: {operation}",
+            )
         return self.client.call(tool, arguments)
 
 
@@ -75,10 +93,17 @@ class LinearTrackerAdapter(TrackerAdapter):
     def get_work_item(self, ref: str) -> WorkItem:
         return _work_item(self._call("get_work_item", {"id": ref}), self.mappings)
 
-    def search_work_items(self, query: str, cursor: str | None = None) -> dict[str, Any]:
-        return _page(self._call("search_work_items", {"query": query, "cursor": cursor}), self.mappings)
+    def search_work_items(
+        self, query: str, cursor: str | None = None
+    ) -> dict[str, Any]:
+        return _page(
+            self._call("search_work_items", {"query": query, "cursor": cursor}),
+            self.mappings,
+        )
 
-    def create_work_item(self, kind: str, title: str, description: str, parent_ref: str | None = None) -> WorkItem:
+    def create_work_item(
+        self, kind: str, title: str, description: str, parent_ref: str | None = None
+    ) -> WorkItem:
         args = {
             "kind": self._provider_kind(kind),
             "title": title,
@@ -89,10 +114,21 @@ class LinearTrackerAdapter(TrackerAdapter):
         return _work_item(self._call("create_work_item", args), self.mappings)
 
     def transition_work_item(self, ref: str, state: str) -> WorkItem:
-        return _work_item(self._call("transition_work_item", {"id": ref, "state": self._provider_state(state)}), self.mappings)
+        return _work_item(
+            self._call(
+                "transition_work_item",
+                {"id": ref, "state": self._provider_state(state)},
+            ),
+            self.mappings,
+        )
 
     def list_artifacts(self, ref: str, kind: str | None = None) -> list[ArtifactRef]:
-        artifacts = [_artifact(item) for item in _items(self._call("list_artifacts", {"issueId": ref, "kind": kind}))]
+        artifacts = [
+            _artifact(item)
+            for item in _items(
+                self._call("list_artifacts", {"issueId": ref, "kind": kind})
+            )
+        ]
         return [item for item in artifacts if kind is None or item.kind == kind]
 
     def list_children(self, ref: str) -> list[WorkItem]:
@@ -105,10 +141,14 @@ class LinearTrackerAdapter(TrackerAdapter):
         ]
         return [_work_item(item, self.mappings) for item in (selected or items)]
 
-    def publish_artifact(self, ref: str, kind: str, title: str, content: str, revision: str) -> ArtifactRef:
+    def publish_artifact(
+        self, ref: str, kind: str, title: str, content: str, revision: str
+    ) -> ArtifactRef:
         from .publish import publish_artifact_idempotent
 
-        envelope = _encode_artifact_envelope(kind=kind, title=title, revision=revision, content=content)
+        envelope = _encode_artifact_envelope(
+            kind=kind, title=title, revision=revision, content=content
+        )
         result = publish_artifact_idempotent(
             list_fn=lambda: self.list_artifacts(ref, kind),
             create_fn=lambda: _artifact(
@@ -151,22 +191,49 @@ class LinearTrackerAdapter(TrackerAdapter):
 
 class AzureDevOpsTrackerAdapter(TrackerAdapter):
     def get_work_item(self, ref: str) -> WorkItem:
-        return _work_item(self._call("get_work_item", {"id": int(ref) if str(ref).isdigit() else ref}), self.mappings)
+        return _work_item(
+            self._call(
+                "get_work_item", {"id": int(ref) if str(ref).isdigit() else ref}
+            ),
+            self.mappings,
+        )
 
-    def search_work_items(self, query: str, cursor: str | None = None) -> dict[str, Any]:
-        return _page(self._call("search_work_items", {"query": query, "cursor": cursor}), self.mappings)
+    def search_work_items(
+        self, query: str, cursor: str | None = None
+    ) -> dict[str, Any]:
+        return _page(
+            self._call("search_work_items", {"query": query, "cursor": cursor}),
+            self.mappings,
+        )
 
-    def create_work_item(self, kind: str, title: str, description: str, parent_ref: str | None = None) -> WorkItem:
-        args = {"type": self.mappings.get("kinds", {}).get(kind, kind), "title": title, "description": description}
+    def create_work_item(
+        self, kind: str, title: str, description: str, parent_ref: str | None = None
+    ) -> WorkItem:
+        args = {
+            "type": self.mappings.get("kinds", {}).get(kind, kind),
+            "title": title,
+            "description": description,
+        }
         if parent_ref:
-            args["parentId"] = int(parent_ref) if str(parent_ref).isdigit() else parent_ref
+            args["parentId"] = (
+                int(parent_ref) if str(parent_ref).isdigit() else parent_ref
+            )
         return _work_item(self._call("create_work_item", args), self.mappings)
 
     def transition_work_item(self, ref: str, state: str) -> WorkItem:
-        return _work_item(self._call("transition_work_item", {"id": ref, "state": self._provider_state(state)}), self.mappings)
+        return _work_item(
+            self._call(
+                "transition_work_item",
+                {"id": ref, "state": self._provider_state(state)},
+            ),
+            self.mappings,
+        )
 
     def list_artifacts(self, ref: str, kind: str | None = None) -> list[ArtifactRef]:
-        artifacts = [_artifact(item) for item in _items(self._call("list_artifacts", {"id": ref, "kind": kind}))]
+        artifacts = [
+            _artifact(item)
+            for item in _items(self._call("list_artifacts", {"id": ref, "kind": kind}))
+        ]
         return [item for item in artifacts if kind is None or item.kind == kind]
 
     def list_children(self, ref: str) -> list[WorkItem]:
@@ -181,10 +248,14 @@ class AzureDevOpsTrackerAdapter(TrackerAdapter):
         )
         return [_work_item(item, self.mappings) for item in _items(result)]
 
-    def publish_artifact(self, ref: str, kind: str, title: str, content: str, revision: str) -> ArtifactRef:
+    def publish_artifact(
+        self, ref: str, kind: str, title: str, content: str, revision: str
+    ) -> ArtifactRef:
         from .publish import publish_artifact_idempotent
 
-        envelope = _encode_artifact_envelope(kind=kind, title=title, revision=revision, content=content)
+        envelope = _encode_artifact_envelope(
+            kind=kind, title=title, revision=revision, content=content
+        )
         result = publish_artifact_idempotent(
             list_fn=lambda: self.list_artifacts(ref, kind),
             create_fn=lambda: _artifact(
@@ -222,35 +293,64 @@ class AzureDevOpsTrackerAdapter(TrackerAdapter):
         return str(self.mappings.get("states", {}).get(state, state))
 
 
-class ScmAdapter(ABC):
+class ScmAdapter:
     def __init__(self, config: dict[str, Any]):
         self.config = config
         connection = config.get("connection") or {}
-        self.client = client_from_connection(connection) if connection.get("command") else None
+        self.client = (
+            client_from_connection(connection) if connection.get("command") else None
+        )
         self.bindings = config.get("bindings", {})
 
     def _call(self, operation: str, arguments: dict[str, Any]) -> Any:
         tool = self.bindings.get(operation)
         if not isinstance(tool, str) or not tool:
-            raise IntegrationError("unsupported_capability", f"SCM operation is not configured: {operation}")
+            raise IntegrationError(
+                "unsupported_capability",
+                f"SCM operation is not configured: {operation}",
+            )
         if self.client is None:
-            raise IntegrationError("provider_unavailable", "SCM MCP client is not configured.")
+            raise IntegrationError(
+                "provider_unavailable", "SCM MCP client is not configured."
+            )
         return self.client.call(tool, arguments)
 
     def get_pull_request(self, ref: str) -> PullRequest:
         return _pull_request(self._call("get_pull_request", {"id": ref}))
 
-    def create_pull_request(self, title: str, description: str, source_branch: str, target_branch: str) -> PullRequest:
-        return _pull_request(self._call("create_pull_request", {"title": title, "description": description, "source": source_branch, "target": target_branch}))
+    def create_pull_request(
+        self, title: str, description: str, source_branch: str, target_branch: str
+    ) -> PullRequest:
+        return _pull_request(
+            self._call(
+                "create_pull_request",
+                {
+                    "title": title,
+                    "description": description,
+                    "source": source_branch,
+                    "target": target_branch,
+                },
+            )
+        )
 
     def list_review_threads(self, ref: str) -> list[ReviewThread]:
-        return [_review_thread(item) for item in _items(self._call("list_review_threads", {"id": ref}))]
+        return [
+            _review_thread(item)
+            for item in _items(self._call("list_review_threads", {"id": ref}))
+        ]
 
-    def reply_to_thread(self, pr_ref: str, thread_ref: str, content: str) -> dict[str, Any]:
-        return self._call("reply_to_thread", {"pull_request": pr_ref, "thread": thread_ref, "content": content})
+    def reply_to_thread(
+        self, pr_ref: str, thread_ref: str, content: str
+    ) -> dict[str, Any]:
+        return self._call(
+            "reply_to_thread",
+            {"pull_request": pr_ref, "thread": thread_ref, "content": content},
+        )
 
     def link_work_item(self, pr_ref: str, work_item_ref: str) -> dict[str, Any]:
-        return self._call("link_work_item", {"pull_request": pr_ref, "work_item": work_item_ref})
+        return self._call(
+            "link_work_item", {"pull_request": pr_ref, "work_item": work_item_ref}
+        )
 
 
 class GitHubScmAdapter(ScmAdapter):
@@ -263,11 +363,17 @@ class GitHubScmAdapter(ScmAdapter):
 
     def _run(self, args: list[str]) -> Any:
         try:
-            result = subprocess.run(["gh", *args], capture_output=True, text=True, timeout=30)
+            result = subprocess.run(
+                ["gh", *args], capture_output=True, text=True, timeout=30
+            )
         except (OSError, subprocess.SubprocessError) as exc:
-            raise IntegrationError("provider_unavailable", f"GitHub CLI unavailable: {exc}") from exc
+            raise IntegrationError(
+                "provider_unavailable", f"GitHub CLI unavailable: {exc}"
+            ) from exc
         if result.returncode != 0:
-            raise IntegrationError("provider_error", (result.stderr or result.stdout).strip())
+            raise IntegrationError(
+                "provider_error", (result.stderr or result.stdout).strip()
+            )
         try:
             return json.loads(result.stdout) if result.stdout.strip() else {}
         except json.JSONDecodeError:
@@ -279,19 +385,50 @@ class GitHubScmAdapter(ScmAdapter):
 
     def _run_text(self, args: list[str]) -> str:
         try:
-            result = subprocess.run(["gh", *args], capture_output=True, text=True, timeout=30)
+            result = subprocess.run(
+                ["gh", *args], capture_output=True, text=True, timeout=30
+            )
         except (OSError, subprocess.SubprocessError) as exc:
-            raise IntegrationError("provider_unavailable", f"GitHub CLI unavailable: {exc}") from exc
+            raise IntegrationError(
+                "provider_unavailable", f"GitHub CLI unavailable: {exc}"
+            ) from exc
         if result.returncode != 0:
-            raise IntegrationError("provider_error", (result.stderr or result.stdout).strip())
+            raise IntegrationError(
+                "provider_error", (result.stderr or result.stdout).strip()
+            )
         return result.stdout
 
     def get_pull_request(self, ref: str) -> PullRequest:
-        value = self._run(["pr", "view", ref, *self._repo_args(), "--json", "number,title,url,headRefName,baseRefName,state"])
+        value = self._run(
+            [
+                "pr",
+                "view",
+                ref,
+                *self._repo_args(),
+                "--json",
+                "number,title,url,headRefName,baseRefName,state",
+            ]
+        )
         return _pull_request(value)
 
-    def create_pull_request(self, title: str, description: str, source_branch: str, target_branch: str) -> PullRequest:
-        value = self._run_text(["pr", "create", *self._repo_args(), "--title", title, "--body", description, "--head", source_branch, "--base", target_branch])
+    def create_pull_request(
+        self, title: str, description: str, source_branch: str, target_branch: str
+    ) -> PullRequest:
+        value = self._run_text(
+            [
+                "pr",
+                "create",
+                *self._repo_args(),
+                "--title",
+                title,
+                "--body",
+                description,
+                "--head",
+                source_branch,
+                "--base",
+                target_branch,
+            ]
+        )
         url = value.strip().splitlines()[-1] if value.strip() else ""
         return self.get_pull_request(url.rsplit("/", 1)[-1] if url else source_branch)
 
@@ -300,18 +437,42 @@ class GitHubScmAdapter(ScmAdapter):
         value = self._run(["api", f"repos/{owner}/{repo}/pulls/{ref}/comments"])
         return [_review_thread(item) for item in _items(value)]
 
-    def reply_to_thread(self, pr_ref: str, thread_ref: str, content: str) -> dict[str, Any]:
+    def reply_to_thread(
+        self, pr_ref: str, thread_ref: str, content: str
+    ) -> dict[str, Any]:
         owner, repo = self.config.get("owner"), self.config.get("repo")
-        return self._run(["api", "-X", "POST", f"repos/{owner}/{repo}/pulls/{pr_ref}/comments/{thread_ref}/replies", "-f", f"body={content}"])
+        return self._run(
+            [
+                "api",
+                "-X",
+                "POST",
+                f"repos/{owner}/{repo}/pulls/{pr_ref}/comments/{thread_ref}/replies",
+                "-f",
+                f"body={content}",
+            ]
+        )
 
     def link_work_item(self, pr_ref: str, work_item_ref: str) -> dict[str, Any]:
-        current = self._run(["pr", "view", pr_ref, *self._repo_args(), "--json", "body"])
-        body = str((current or {}).get("body") or "") if isinstance(current, dict) else ""
+        current = self._run(
+            ["pr", "view", pr_ref, *self._repo_args(), "--json", "body"]
+        )
+        body = (
+            str((current or {}).get("body") or "") if isinstance(current, dict) else ""
+        )
         marker = f"Work item: {work_item_ref}"
         if marker not in body:
-            updated = f"{body.rstrip()}\n\n{marker}\n" if body.strip() else f"{marker}\n"
-            self._run_text(["pr", "edit", pr_ref, *self._repo_args(), "--body", updated])
-        return {"linked": True, "mechanism": "pull-request-body", "workItem": work_item_ref, "pullRequest": pr_ref}
+            updated = (
+                f"{body.rstrip()}\n\n{marker}\n" if body.strip() else f"{marker}\n"
+            )
+            self._run_text(
+                ["pr", "edit", pr_ref, *self._repo_args(), "--body", updated]
+            )
+        return {
+            "linked": True,
+            "mechanism": "pull-request-body",
+            "workItem": work_item_ref,
+            "pullRequest": pr_ref,
+        }
 
 
 class AzureReposScmAdapter(ScmAdapter):
@@ -329,7 +490,9 @@ class AzureReposScmAdapter(ScmAdapter):
             )
         )
 
-    def create_pull_request(self, title: str, description: str, source_branch: str, target_branch: str) -> PullRequest:
+    def create_pull_request(
+        self, title: str, description: str, source_branch: str, target_branch: str
+    ) -> PullRequest:
         return _pull_request(
             self._call(
                 "create_pull_request",
@@ -358,7 +521,9 @@ class AzureReposScmAdapter(ScmAdapter):
         )
         return [_review_thread(item) for item in _items(value)]
 
-    def reply_to_thread(self, pr_ref: str, thread_ref: str, content: str) -> dict[str, Any]:
+    def reply_to_thread(
+        self, pr_ref: str, thread_ref: str, content: str
+    ) -> dict[str, Any]:
         return self._call(
             "reply_to_thread",
             {
@@ -378,7 +543,9 @@ class AzureReposScmAdapter(ScmAdapter):
                 "pull_request": pr_ref,
                 "work_item": work_item_ref,
                 "pullRequestId": int(pr_ref) if str(pr_ref).isdigit() else pr_ref,
-                "workItemId": int(work_item_ref) if str(work_item_ref).isdigit() else work_item_ref,
+                "workItemId": int(work_item_ref)
+                if str(work_item_ref).isdigit()
+                else work_item_ref,
                 "repositoryId": self.config.get("repository"),
                 "project": self.config.get("project"),
             },
@@ -386,11 +553,15 @@ class AzureReposScmAdapter(ScmAdapter):
 
 
 def tracker_adapter(config: dict[str, Any]) -> TrackerAdapter:
+    from .local_tracker import LocalTrackerAdapter
+
     adapter = config.get("adapter")
     if adapter == "linear":
         return LinearTrackerAdapter(config)
     if adapter == "azure_devops":
         return AzureDevOpsTrackerAdapter(config)
+    if adapter == "local_tracker":
+        return LocalTrackerAdapter(config)
     raise IntegrationError("invalid_config", f"Unsupported tracker adapter: {adapter}")
 
 
@@ -415,17 +586,40 @@ def _items(value: Any) -> list[Any]:
 
 def _page(value: Any, mappings: dict[str, Any]) -> dict[str, Any]:
     items = [_work_item(item, mappings) for item in _items(value)]
-    return {"items": [item.__dict__ for item in items], "nextCursor": value.get("nextCursor") if isinstance(value, dict) else None}
+    return {
+        "items": [item.__dict__ for item in items],
+        "nextCursor": value.get("nextCursor") if isinstance(value, dict) else None,
+    }
 
 
 def _work_item(value: Any, mappings: dict[str, Any]) -> WorkItem:
     if not isinstance(value, dict):
-        raise IntegrationError("provider_error", "Provider returned an invalid work-item payload.")
-    kind_raw = str(value.get("kind") or value.get("type") or "task").lower().replace(" ", "_")
-    state_raw = str(value.get("state") or value.get("status") or "backlog").lower().replace(" ", "_")
+        raise IntegrationError(
+            "provider_error", "Provider returned an invalid work-item payload."
+        )
+    kind_raw = (
+        str(value.get("kind") or value.get("type") or "task").lower().replace(" ", "_")
+    )
+    state_raw = (
+        str(value.get("state") or value.get("status") or "backlog")
+        .lower()
+        .replace(" ", "_")
+    )
     kind = _reverse_mapping(kind_raw, mappings.get("kinds", {}), WorkItemKind.TASK)
-    state = _reverse_mapping(state_raw, mappings.get("states", {}), LogicalState.BACKLOG)
-    return WorkItem(str(value.get("id") or value.get("identifier") or ""), str(value.get("key") or value.get("identifier") or value.get("id") or ""), str(value.get("title") or value.get("name") or ""), WorkItemKind(kind), LogicalState(state), value.get("url"), str(value.get("description") or ""), value.get("parentId"), value)
+    state = _reverse_mapping(
+        state_raw, mappings.get("states", {}), LogicalState.BACKLOG
+    )
+    return WorkItem(
+        str(value.get("id") or value.get("identifier") or ""),
+        str(value.get("key") or value.get("identifier") or value.get("id") or ""),
+        str(value.get("title") or value.get("name") or ""),
+        WorkItemKind(kind),
+        LogicalState(state),
+        value.get("url"),
+        str(value.get("description") or ""),
+        value.get("parentId"),
+        value,
+    )
 
 
 def _reverse_mapping(value: str, mapping: dict[str, Any], fallback: str) -> str:
@@ -437,8 +631,12 @@ def _reverse_mapping(value: str, mapping: dict[str, Any], fallback: str) -> str:
     return fallback
 
 
-def _encode_artifact_envelope(*, kind: str, title: str, revision: str, content: str) -> str:
-    header = json.dumps({"kind": kind, "title": title, "revision": revision}, sort_keys=True)
+def _encode_artifact_envelope(
+    *, kind: str, title: str, revision: str, content: str
+) -> str:
+    header = json.dumps(
+        {"kind": kind, "title": title, "revision": revision}, sort_keys=True
+    )
     return f"{_ARTIFACT_ENVELOPE_PREFIX} {header}\n{content}"
 
 
@@ -471,8 +669,16 @@ def _artifact(
     if isinstance(value, str):
         value = {"body": value, "content": value}
     if not isinstance(value, dict):
-        raise IntegrationError("provider_error", "Provider returned an invalid artifact payload.")
-    text = str(value.get("content") or value.get("body") or value.get("text") or value.get("comment") or "")
+        raise IntegrationError(
+            "provider_error", "Provider returned an invalid artifact payload."
+        )
+    text = str(
+        value.get("content")
+        or value.get("body")
+        or value.get("text")
+        or value.get("comment")
+        or ""
+    )
     parsed = _parse_artifact_envelope(text)
     if parsed is not None:
         return ArtifactRef(
@@ -495,14 +701,26 @@ def _artifact(
 
 def _pull_request(value: Any) -> PullRequest:
     if not isinstance(value, dict):
-        raise IntegrationError("provider_error", "Provider returned an invalid pull-request payload.")
+        raise IntegrationError(
+            "provider_error", "Provider returned an invalid pull-request payload."
+        )
     return PullRequest(
         str(value.get("id") or value.get("number") or ""),
         str(value.get("number") or value.get("id") or ""),
         str(value.get("title") or ""),
         str(value.get("url") or ""),
-        str(value.get("source") or value.get("sourceBranch") or value.get("headRefName") or ""),
-        str(value.get("target") or value.get("targetBranch") or value.get("baseRefName") or ""),
+        str(
+            value.get("source")
+            or value.get("sourceBranch")
+            or value.get("headRefName")
+            or ""
+        ),
+        str(
+            value.get("target")
+            or value.get("targetBranch")
+            or value.get("baseRefName")
+            or ""
+        ),
         str(value.get("state") or ""),
         value,
     )
@@ -510,5 +728,15 @@ def _pull_request(value: Any) -> PullRequest:
 
 def _review_thread(value: Any) -> ReviewThread:
     if not isinstance(value, dict):
-        raise IntegrationError("provider_error", "Provider returned an invalid review-thread payload.")
-    return ReviewThread(str(value.get("id") or ""), value.get("file"), value.get("line"), str(value.get("reviewer") or ""), str(value.get("comment") or value.get("content") or ""), str(value.get("status") or "active"), value)
+        raise IntegrationError(
+            "provider_error", "Provider returned an invalid review-thread payload."
+        )
+    return ReviewThread(
+        str(value.get("id") or ""),
+        value.get("file"),
+        value.get("line"),
+        str(value.get("reviewer") or ""),
+        str(value.get("comment") or value.get("content") or ""),
+        str(value.get("status") or "active"),
+        value,
+    )

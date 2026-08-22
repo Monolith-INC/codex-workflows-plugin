@@ -9,7 +9,11 @@ from typing import Any
 from .targets import Target, target_config_paths
 
 PLUGIN_NAME = "codex-workflows-plugin"
-_MANAGED_HOOK_MARKERS = ("codex-workflows-plugin", "codex_workflows", "workflow-integrations")
+_MANAGED_HOOK_MARKERS = (
+    "codex-workflows-plugin",
+    "codex_workflows",
+    "workflow-integrations",
+)
 
 
 @dataclass
@@ -128,7 +132,9 @@ def _project_hook_paths(project_root: Path) -> list[Path]:
     return paths
 
 
-def _plan_clean_hook_config(plan: UninstallPlan, config_path: Path, *, prune_stop: Path) -> None:
+def _plan_clean_hook_config(
+    plan: UninstallPlan, config_path: Path, *, prune_stop: Path
+) -> None:
     if not config_path.exists():
         return
     try:
@@ -149,7 +155,9 @@ def _plan_clean_hook_config(plan: UninstallPlan, config_path: Path, *, prune_sto
         plan.messages.append(f"Write cleaned config: {config_path}")
 
 
-def _plan_project_asset_cleanup(plan: UninstallPlan, project_root: Path, install_dir: Path) -> None:
+def _plan_project_asset_cleanup(
+    plan: UninstallPlan, project_root: Path, install_dir: Path
+) -> None:
     for rel, source_dir in _project_asset_sources(install_dir):
         project_dir = project_root / ".agent" / rel
         if not source_dir.is_dir() or not project_dir.exists():
@@ -173,7 +181,9 @@ def _project_asset_sources(install_dir: Path) -> tuple[tuple[str, Path], ...]:
     return (("workflows", workflow_src), ("rules", rules_src))
 
 
-def _plan_project_discovery_cleanup(plan: UninstallPlan, project_root: Path, install_dir: Path) -> None:
+def _plan_project_discovery_cleanup(
+    plan: UninstallPlan, project_root: Path, install_dir: Path
+) -> None:
     skills_src = install_dir / "skills"
     skill_names: set[str] = set()
     if skills_src.is_dir():
@@ -192,7 +202,9 @@ def _plan_project_discovery_cleanup(plan: UninstallPlan, project_root: Path, ins
     if commands_src.is_dir() and commands_dst.is_dir():
         for item in commands_src.iterdir():
             if item.is_file() and item.suffix == ".md":
-                _plan_remove_path(plan, commands_dst / item.name, prune_stop=project_root)
+                _plan_remove_path(
+                    plan, commands_dst / item.name, prune_stop=project_root
+                )
 
 
 def _plan_mcp_cleanup(plan: UninstallPlan, project_root: Path) -> None:
@@ -205,7 +217,9 @@ def _plan_mcp_cleanup(plan: UninstallPlan, project_root: Path) -> None:
         plan.messages.append(f"Skipped invalid JSON MCP config: {mcp_path}")
         return
     servers = payload.get("mcpServers")
-    if not isinstance(servers, dict) or not ({"agentic-orchestrator", "workflow-integrations"} & set(servers)):
+    if not isinstance(servers, dict) or not (
+        {"agentic-orchestrator", "workflow-integrations"} & set(servers)
+    ):
         return
     cleaned = dict(payload)
     cleaned_servers = dict(servers)
@@ -223,7 +237,10 @@ def _plan_codex_mcp_cleanup(plan: UninstallPlan, project_root: Path) -> None:
     config_path = project_root / ".codex" / "config.toml"
     if not config_path.exists():
         return
-    cleaned = _strip_codex_mcp_server_sections(config_path.read_text(encoding="utf-8"), {"agentic-orchestrator", "workflow-integrations"})
+    cleaned = _strip_codex_mcp_server_sections(
+        config_path.read_text(encoding="utf-8"),
+        {"agentic-orchestrator", "workflow-integrations"},
+    )
     if cleaned:
         plan.write_text[config_path] = cleaned.rstrip() + "\n"
         plan.messages.append(f"Write cleaned Codex MCP config: {config_path}")
@@ -241,7 +258,9 @@ def _plan_cursor_mcp_cleanup(plan: UninstallPlan, project_root: Path) -> None:
         plan.messages.append(f"Skipped invalid JSON Cursor MCP config: {cursor_path}")
         return
     servers = payload.get("mcpServers") if isinstance(payload, dict) else None
-    if not isinstance(servers, dict) or not ({"agentic-orchestrator", "workflow-integrations"} & set(servers)):
+    if not isinstance(servers, dict) or not (
+        {"agentic-orchestrator", "workflow-integrations"} & set(servers)
+    ):
         return
     cleaned = dict(payload)
     cleaned_servers = dict(servers)
@@ -255,22 +274,32 @@ def _plan_cursor_mcp_cleanup(plan: UninstallPlan, project_root: Path) -> None:
         plan.messages.append(f"Write cleaned Cursor MCP config: {cursor_path}")
 
 
-def _plan_claude_mcp_enablement_cleanup(plan: UninstallPlan, project_root: Path) -> None:
+def _plan_claude_mcp_enablement_cleanup(
+    plan: UninstallPlan, project_root: Path
+) -> None:
     settings_path = project_root / ".claude" / "settings.local.json"
     if not settings_path.exists():
         return
     try:
         payload = json.loads(settings_path.read_text(encoding="utf-8"))
     except json.JSONDecodeError:
-        plan.messages.append(f"Skipped invalid JSON Claude local settings: {settings_path}")
+        plan.messages.append(
+            f"Skipped invalid JSON Claude local settings: {settings_path}"
+        )
         return
     if not isinstance(payload, dict):
         return
     enabled = payload.get("enabledMcpjsonServers")
-    if not isinstance(enabled, list) or not ({"agentic-orchestrator", "workflow-integrations"} & set(enabled)):
+    if not isinstance(enabled, list) or not (
+        {"agentic-orchestrator", "workflow-integrations"} & set(enabled)
+    ):
         return
     cleaned = dict(payload)
-    cleaned["enabledMcpjsonServers"] = [name for name in enabled if name not in {"agentic-orchestrator", "workflow-integrations"}]
+    cleaned["enabledMcpjsonServers"] = [
+        name
+        for name in enabled
+        if name not in {"agentic-orchestrator", "workflow-integrations"}
+    ]
     if (
         not cleaned["enabledMcpjsonServers"]
         and cleaned.get("enableAllProjectMcpServers") is True
@@ -296,7 +325,11 @@ def _strip_codex_mcp_server_sections(content: str, server_names: set[str]) -> st
 
 def _toml_header(line: str) -> str | None:
     stripped = line.strip()
-    if stripped.startswith("[[") or not stripped.startswith("[") or not stripped.endswith("]"):
+    if (
+        stripped.startswith("[[")
+        or not stripped.startswith("[")
+        or not stripped.endswith("]")
+    ):
         return None
     return stripped[1:-1].strip()
 
@@ -334,7 +367,9 @@ def _apply_plan(plan: UninstallPlan) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8")
 
-    for path in sorted(plan.remove_paths, key=lambda item: len(item.parts), reverse=True):
+    for path in sorted(
+        plan.remove_paths, key=lambda item: len(item.parts), reverse=True
+    ):
         if path.is_symlink() or path.is_file():
             path.unlink()
             _prune_empty_parents(path.parent, plan.prune_stops[path])

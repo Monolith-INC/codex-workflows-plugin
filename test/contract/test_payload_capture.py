@@ -1,6 +1,7 @@
 import json
 import tempfile
 import unittest
+from datetime import datetime
 from pathlib import Path
 
 from scripts.payload_capture import capture_hook_payload
@@ -24,6 +25,7 @@ class TestPayloadCapture(unittest.TestCase):
             self.assertEqual(recorded["client"], "codex")
             self.assertEqual(recorded["project_root"], "/workspace/project")
             self.assertEqual(recorded["payload"], payload)
+            self.assertIsNotNone(datetime.fromisoformat(recorded["captured_at"]).tzinfo)
 
     def test_skips_capture_when_directory_is_missing(self):
         payload = {"tool_name": "Bash"}

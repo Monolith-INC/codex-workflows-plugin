@@ -37,7 +37,9 @@ creator: {CREATOR}
 ## Verification Plan
 
 ### Automated Tests
+
 - [ ] Unit/widget tests written and passing.
 
 ### Manual Verification
+
 - [ ] [Steps to manually verify feature on simulator/device]

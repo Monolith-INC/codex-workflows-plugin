@@ -25,4 +25,3 @@ Compatibility rules.
 ## Requirements (RFC 2119)
 
 MUST/SHOULD/MAY constraints.
-

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the Codex plugin manifest for CI and local checks."""
+"""Validate the workflow plugin manifest for CI and local checks."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from pathlib import Path
 
 def validate_plugin(repo_root: Path) -> list[str]:
     errors: list[str] = []
-    manifest_path = repo_root / ".codex-plugin" / "plugin.json"
+    manifest_path = repo_root / "codex-workflows-plugin.json"
     if not manifest_path.is_file():
         errors.append(f"Missing manifest: {manifest_path}")
         return errors
@@ -39,13 +39,15 @@ def validate_plugin(repo_root: Path) -> list[str]:
 
 
 def main() -> int:
-    repo_root = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else Path(".").resolve()
+    repo_root = (
+        Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else Path(".").resolve()
+    )
     errors = validate_plugin(repo_root)
     if errors:
         for error in errors:
             print(f"error: {error}", file=sys.stderr)
         return 1
-    print(f"ok: {repo_root / '.codex-plugin' / 'plugin.json'}")
+    print(f"ok: {repo_root / 'codex-workflows-plugin.json'}")
     return 0
 
 

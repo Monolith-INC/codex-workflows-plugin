@@ -19,7 +19,10 @@ def _is_flat_hook_list(val: Any) -> bool:
     return (
         isinstance(val, list)
         and bool(val)
-        and all(isinstance(item, dict) and "command" in item and "hooks" not in item for item in val)
+        and all(
+            isinstance(item, dict) and "command" in item and "hooks" not in item
+            for item in val
+        )
     )
 
 
@@ -61,20 +64,36 @@ def _merge_hook_group_lists(base: list, override: list) -> list:
 def deep_merge(base: Mapping[str, Any], override: Mapping[str, Any]) -> dict[str, Any]:
     result: dict[str, Any] = deepcopy(dict(base))
     for key, value in override.items():
-        if key in result and isinstance(result[key], dict) and isinstance(value, Mapping):
+        if (
+            key in result
+            and isinstance(result[key], dict)
+            and isinstance(value, Mapping)
+        ):
             result[key] = deep_merge(result[key], value)
-        elif key in result and _is_hook_group_list(result[key]) and _is_hook_group_list(value):
+        elif (
+            key in result
+            and _is_hook_group_list(result[key])
+            and _is_hook_group_list(value)
+        ):
             result[key] = _merge_hook_group_lists(result[key], value)
-        elif key in result and _is_flat_hook_list(result[key]) and _is_flat_hook_list(value):
+        elif (
+            key in result
+            and _is_flat_hook_list(result[key])
+            and _is_flat_hook_list(value)
+        ):
             result[key] = _merge_flat_hook_lists(result[key], value)
-        elif key in result and isinstance(result[key], list) and isinstance(value, list):
+        elif (
+            key in result and isinstance(result[key], list) and isinstance(value, list)
+        ):
             result[key] = deepcopy(result[key]) + deepcopy(value)
         else:
             result[key] = deepcopy(value)
     return result
 
 
-def merge_hook_configs(existing: dict[str, Any] | None, incoming: dict[str, Any]) -> dict[str, Any]:
+def merge_hook_configs(
+    existing: dict[str, Any] | None, incoming: dict[str, Any]
+) -> dict[str, Any]:
     if not existing:
         return deepcopy(incoming)
     return deep_merge(existing, incoming)
