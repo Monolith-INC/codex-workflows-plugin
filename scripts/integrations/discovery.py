@@ -64,12 +64,12 @@ ADO_STATE_PRESET = {
 TRACKER_BINDING_CANDIDATES: dict[str, tuple[str, ...]] = {
     "get_work_item": ("get_issue", "get_work_item", "wit_get_work_item"),
     "search_work_items": ("list_issues", "search_issues", "search_work_items", "wit_query_by_wiql"),
-    "create_work_item": ("create_issue", "create_work_item", "wit_create_work_item"),
+    "create_work_item": ("save_issue", "create_issue", "create_work_item", "wit_create_work_item"),
     "list_children": ("list_issue_children", "list_children", "list_issues", "wit_get_work_items"),
-    "transition_work_item": ("update_issue", "transition_issue", "transition_work_item", "wit_update_work_item"),
-    "publish_artifact": ("create_comment", "publish_artifact", "wit_add_work_item_comment"),
+    "transition_work_item": ("save_issue", "update_issue", "transition_issue", "transition_work_item", "wit_update_work_item"),
+    "publish_artifact": ("save_comment", "create_comment", "publish_artifact", "wit_add_work_item_comment"),
     "list_artifacts": ("list_comments", "list_artifacts", "wit_get_work_item_comments"),
-    "link_development_artifact": ("create_comment", "link_development_artifact", "wit_add_artifact_link"),
+    "link_development_artifact": ("save_comment", "create_comment", "link_development_artifact", "wit_add_artifact_link"),
 }
 
 SCM_BINDING_CANDIDATES: dict[str, tuple[str, ...]] = {

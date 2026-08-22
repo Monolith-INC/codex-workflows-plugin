@@ -266,12 +266,12 @@ def _default_tracker_config(provider: str, scope: str, project_dest: Path | None
             "bindings": {
                 "get_work_item": "get_issue",
                 "search_work_items": "list_issues",
-                "create_work_item": "create_issue",
+                "create_work_item": "save_issue",
                 "list_children": "list_issues",
-                "transition_work_item": "update_issue",
-                "publish_artifact": "create_comment",
+                "transition_work_item": "save_issue",
+                "publish_artifact": "save_comment",
                 "list_artifacts": "list_comments",
-                "link_development_artifact": "create_comment",
+                "link_development_artifact": "save_comment",
             },
         }
     if provider == "azure_devops":
