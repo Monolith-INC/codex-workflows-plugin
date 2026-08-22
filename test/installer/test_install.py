@@ -8,6 +8,7 @@ from pathlib import Path
 
 from scripts.installer.bootstrap import (
     _codex_mcp_server_config,
+    _default_tracker_config,
     default_install_dir,
     install_from_source,
     install_from_zip,
@@ -303,6 +304,14 @@ class TestInstallCLI(unittest.TestCase):
             ],
         )
         self.assertIs(_codex_mcp_server_config(non_interactive), non_interactive)
+
+    def test_linear_default_bindings_use_current_mcp_tool_names(self):
+        config = _default_tracker_config("linear", "auto")
+
+        self.assertEqual(config["bindings"]["create_work_item"], "save_issue")
+        self.assertEqual(config["bindings"]["transition_work_item"], "save_issue")
+        self.assertEqual(config["bindings"]["publish_artifact"], "save_comment")
+        self.assertEqual(config["bindings"]["link_development_artifact"], "save_comment")
 
 
 class TestStandaloneBootstrapZipInstall(unittest.TestCase):
