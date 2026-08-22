@@ -1,4 +1,4 @@
-"""Filesystem-backed implementation of the provider-neutral tracker contract."""
+"""Filesystem-backed local tracker provider and adapter."""
 
 from __future__ import annotations
 
@@ -10,8 +10,12 @@ from typing import Any
 
 from .adapters import (
     TrackerAdapter,
+    _artifact,
     _encode_artifact_envelope,
+    _items,
+    _page,
     _parse_artifact_envelope,
+    _work_item,
 )
 from .contracts import (
     WORK_ITEM_ROLES,
@@ -21,6 +25,107 @@ from .contracts import (
     WorkItem,
     WorkItemKind,
 )
+
+LOCAL_TRACKER_BINDINGS = {
+    "get_work_item": "get_work_item",
+    "search_work_items": "search_work_items",
+    "create_work_item": "create_work_item",
+    "list_children": "list_children",
+    "transition_work_item": "transition_work_item",
+    "publish_artifact": "publish_artifact",
+    "list_artifacts": "list_artifacts",
+    "link_development_artifact": "link_development_artifact",
+}
+
+LOCAL_TRACKER_TOOLS = [
+    {
+        "name": "get_work_item",
+        "description": "Retrieve one local tracker work item.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["ref"],
+            "properties": {"ref": {"type": "string"}},
+        },
+    },
+    {
+        "name": "search_work_items",
+        "description": "Search local tracker work items.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["query"],
+            "properties": {"query": {"type": "string"}, "cursor": {"type": "string"}},
+        },
+    },
+    {
+        "name": "create_work_item",
+        "description": "Create a local epic, feature, story, task, or bug.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["kind", "title"],
+            "properties": {
+                "kind": {"type": "string"},
+                "title": {"type": "string"},
+                "description": {"type": "string"},
+                "parentRef": {"type": "string"},
+            },
+        },
+    },
+    {
+        "name": "list_children",
+        "description": "List local child work items.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["ref"],
+            "properties": {"ref": {"type": "string"}},
+        },
+    },
+    {
+        "name": "transition_work_item",
+        "description": "Transition a local work item to a logical state.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["ref", "state"],
+            "properties": {"ref": {"type": "string"}, "state": {"type": "string"}},
+        },
+    },
+    {
+        "name": "publish_artifact",
+        "description": "Publish a versioned artifact to a local work item.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["ref", "kind", "title", "content", "revision"],
+            "properties": {
+                "ref": {"type": "string"},
+                "kind": {"type": "string"},
+                "title": {"type": "string"},
+                "content": {"type": "string"},
+                "revision": {"type": "string"},
+            },
+        },
+    },
+    {
+        "name": "list_artifacts",
+        "description": "List local artifacts for a work item.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["ref"],
+            "properties": {"ref": {"type": "string"}, "kind": {"type": "string"}},
+        },
+    },
+    {
+        "name": "link_development_artifact",
+        "description": "Persist a local development artifact link.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["ref", "url"],
+            "properties": {
+                "ref": {"type": "string"},
+                "url": {"type": "string"},
+                "type": {"type": "string"},
+            },
+        },
+    },
+]
 
 _PREFIXES = {
     WorkItemKind.EPIC: "EPIC",
@@ -32,6 +137,94 @@ _PREFIXES = {
 
 
 class LocalTrackerAdapter(TrackerAdapter):
+    """Local tracker transport through its project-local MCP provider."""
+
+    def get_work_item(self, ref: str) -> WorkItem:
+        return _work_item(self._call("get_work_item", {"ref": ref}), self.mappings)
+
+    def search_work_items(
+        self, query: str, cursor: str | None = None
+    ) -> dict[str, Any]:
+        return _page(
+            self._call("search_work_items", {"query": query, "cursor": cursor}),
+            self.mappings,
+        )
+
+    def create_work_item(
+        self,
+        kind: str,
+        title: str,
+        description: str,
+        parent_ref: str | None = None,
+    ) -> WorkItem:
+        args = {"kind": kind, "title": title, "description": description}
+        if parent_ref:
+            args["parentRef"] = parent_ref
+        return _work_item(self._call("create_work_item", args), self.mappings)
+
+    def transition_work_item(self, ref: str, state: str) -> WorkItem:
+        return _work_item(
+            self._call("transition_work_item", {"ref": ref, "state": state}),
+            self.mappings,
+        )
+
+    def list_children(self, ref: str) -> list[WorkItem]:
+        result = self._call("list_children", {"ref": ref})
+        return [_work_item(item, self.mappings) for item in _items(result)]
+
+    def publish_artifact(
+        self,
+        ref: str,
+        kind: str,
+        title: str,
+        content: str,
+        revision: str,
+    ) -> ArtifactRef:
+        value = self._call(
+            "publish_artifact",
+            {
+                "ref": ref,
+                "kind": kind,
+                "title": title,
+                "content": content,
+                "revision": revision,
+            },
+        )
+        artifact = _artifact(
+            value,
+            fallback_kind=kind,
+            fallback_title=title,
+            fallback_revision=revision,
+        )
+        attempts = value.get("attempts") if isinstance(value, dict) else None
+        return ArtifactRef(
+            artifact.id,
+            artifact.kind,
+            artifact.title,
+            artifact.revision,
+            artifact.url,
+            dict(artifact.provider_data),
+            value.get("outcome") if isinstance(value, dict) else None,
+            int(attempts) if isinstance(attempts, int) else attempts,
+        )
+
+    def list_artifacts(self, ref: str, kind: str | None = None) -> list[ArtifactRef]:
+        result = self._call("list_artifacts", {"ref": ref, "kind": kind})
+        return [_artifact(item) for item in _items(result)]
+
+    def link_development_artifact(
+        self,
+        ref: str,
+        artifact_url: str,
+        artifact_type: str = "pull_request",
+    ) -> dict[str, Any]:
+        return self._call(
+            "link_development_artifact",
+            {"ref": ref, "url": artifact_url, "type": artifact_type},
+        )
+
+
+class LocalTrackerStore:
     """Store work items and workflow artifacts below ``.local-tracker``."""
 
     def __init__(self, config: dict[str, Any]):

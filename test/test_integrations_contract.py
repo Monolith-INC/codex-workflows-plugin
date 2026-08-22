@@ -1,4 +1,5 @@
 import json
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -7,6 +8,7 @@ from scripts.integrations.adapters import tracker_adapter
 from scripts.integrations.config import load_config
 from scripts.integrations.contracts import IntegrationError
 from scripts.integrations.gateway import handle_call, process_message
+from scripts.integrations.local_tracker import LOCAL_TRACKER_BINDINGS
 
 
 class IntegrationContractTests(unittest.TestCase):
@@ -77,7 +79,38 @@ class IntegrationContractTests(unittest.TestCase):
                         "tracker": {
                             "adapter": "local_tracker",
                             "root": ".local-tracker",
-                            "bindings": {},
+                            "connection": {
+                                "command": sys.executable,
+                                "args": [
+                                    str(
+                                        Path(__file__).parent.parent
+                                        / "scripts"
+                                        / "integrations"
+                                        / "run_local_tracker.py"
+                                    ),
+                                    "--project-root",
+                                    str(root),
+                                    "--root",
+                                    ".local-tracker",
+                                ],
+                            },
+                            "bindings": dict(LOCAL_TRACKER_BINDINGS),
+                            "mappings": {
+                                "kinds": {
+                                    "epic": "epic",
+                                    "feature": "feature",
+                                    "user_story": "user_story",
+                                    "task": "task",
+                                    "bug": "bug",
+                                },
+                                "states": {
+                                    "backlog": "backlog",
+                                    "ready": "ready",
+                                    "in_progress": "in_progress",
+                                    "done": "done",
+                                    "canceled": "canceled",
+                                },
+                            },
                         },
                         "scm": {
                             "adapter": "github",

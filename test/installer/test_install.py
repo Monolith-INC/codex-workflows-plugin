@@ -116,6 +116,15 @@ class TestInstallFromSource(unittest.TestCase):
             (committed / ".codex-workflows" / "integrations.json").read_text()
         )
         self.assertEqual(config["tracker"]["storagePolicy"], "committed")
+        self.assertEqual(
+            config["tracker"]["bindings"]["get_work_item"], "get_work_item"
+        )
+        self.assertEqual(
+            config["tracker"]["bindings"]["publish_artifact"], "publish_artifact"
+        )
+        self.assertIn(
+            "run_local_tracker.py", config["tracker"]["connection"]["args"][0]
+        )
         for state in (
             "backlog",
             "ready",
@@ -272,7 +281,6 @@ class TestInstallCLI(unittest.TestCase):
                 "ignored",
                 "--scm",
                 "github",
-                "--skip-discovery",
             )
             self.assertEqual(code, 0, output)
             payload = json.loads(
@@ -281,6 +289,13 @@ class TestInstallCLI(unittest.TestCase):
                 )
             )
             self.assertEqual(payload["tracker"]["storagePolicy"], "ignored")
+            self.assertEqual(
+                payload["tracker"]["bindings"]["create_work_item"],
+                "create_work_item",
+            )
+            self.assertIn(
+                "run_local_tracker.py", payload["tracker"]["connection"]["args"][0]
+            )
             self.assertIn(
                 ".local-tracker/",
                 (project / ".gitignore").read_text(encoding="utf-8"),

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.25
+
+### Local tracker MCP
+
+- Added a repository-local tracker MCP provider so local tracker installs use the same bound provider contract as remote tracker integrations.
+
 ## 0.5.24
 
 ### Quality gates

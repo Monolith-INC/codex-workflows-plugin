@@ -38,7 +38,7 @@ curl -fsSL https://github.com/Monolith-INC/codex-workflows-plugin/releases/lates
 
 Optional flags: `--target claude|cursor|codex|all-agents`, `--uninstall`.
 
-Pin a release with `CODEX_WORKFLOWS_VERSION=v0.5.24`. Offline installs can set `CODEX_WORKFLOWS_RELEASE_ZIP=/path/to/codex-workflows-plugin-*.zip`.
+Pin a release with `CODEX_WORKFLOWS_VERSION=v0.5.25`. Offline installs can set `CODEX_WORKFLOWS_RELEASE_ZIP=/path/to/codex-workflows-plugin-*.zip`.
 
 ### Requirements
 
@@ -179,17 +179,35 @@ template, and tracking mode. A representative local-tracker setup looks like:
 {
   "tracker": {
     "adapter": "local_tracker",
-    "settings": {
-      "root": ".local-tracker",
-      "storagePolicy": "committed"
+    "root": ".local-tracker",
+    "storagePolicy": "committed",
+    "connection": {
+      "command": "python3",
+      "args": [
+        ".codex-workflows/scripts/integrations/run_local_tracker.py",
+        "--project-root",
+        "/path/to/app",
+        "--root",
+        ".local-tracker"
+      ]
+    },
+    "bindings": {
+      "get_work_item": "get_work_item",
+      "search_work_items": "search_work_items",
+      "create_work_item": "create_work_item",
+      "list_children": "list_children",
+      "transition_work_item": "transition_work_item",
+      "publish_artifact": "publish_artifact",
+      "list_artifacts": "list_artifacts",
+      "link_development_artifact": "link_development_artifact"
     },
     "mappings": {
       "kinds": {
-        "epic": "Epic",
-        "feature": "Feature",
-        "user_story": "User Story",
-        "task": "Task",
-        "bug": "Bug"
+        "epic": "epic",
+        "feature": "feature",
+        "user_story": "user_story",
+        "task": "task",
+        "bug": "bug"
       },
       "states": {
         "backlog": "backlog",
@@ -213,7 +231,10 @@ template, and tracking mode. A representative local-tracker setup looks like:
 The local tracker is a first-class tracker adapter for teams or repositories
 that do not want an external tracker. It supports the same gateway surface as
 Linear and Azure DevOps Boards: create/fetch/search work items, transition
-state, list children, publish artifacts, and persist development links.
+state, list children, publish artifacts, and persist development links. Its
+adapter still goes through configured provider bindings; the provider is a
+project-local MCP server at
+`.codex-workflows/scripts/integrations/run_local_tracker.py`.
 
 When selected during bootstrap, the plugin creates:
 

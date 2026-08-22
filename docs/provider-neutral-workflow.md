@@ -3,7 +3,7 @@
 The workflow is intentionally modeled around logical roles rather than vendor
 objects. Skills talk about Epics, Features, User Stories, Tasks, Bugs, states,
 artifacts, and development links. Adapters translate that contract into Linear,
-Azure DevOps Boards, or local tracker storage.
+Azure DevOps Boards, or the repository-local tracker MCP provider.
 
 The key design promise is that a team can change tracker provider without
 rewriting the workflow skills. The provider boundary sits behind the
@@ -23,13 +23,16 @@ provider behavior lives under `scripts/integrations/`.
 When local tracker is selected, bootstrap creates `.local-tracker/` with state
 folders for `backlog`, `ready`, `in_progress`, `done`, and `canceled`; records
 are committed by default and the user may instead select the managed ignore
-policy.
+policy. Bootstrap also writes a provider connection to
+`.codex-workflows/scripts/integrations/run_local_tracker.py` and binds every
+required tracker operation to that local MCP server, the same way remote
+trackers bind their advertised tools.
 
 Example non-interactive local bootstrap:
 
 ```bash
 python3 -m scripts.installer.bootstrap \
-  /path/to/codex-workflows-plugin-0.5.24.zip \
+  /path/to/codex-workflows-plugin-0.5.25.zip \
   --dest /path/to/app \
   --target all-agents \
   --tracker local_tracker \
@@ -54,8 +57,9 @@ The generated tracker root is deliberately small and inspectable:
       resolution-report-001.md
 ```
 
-External providers use their own storage, but expose the same logical contract:
-work-item lookup, state transition, children, artifact publication, and
+Every tracker provider, including the repository-local tracker, exposes the
+same logical contract through MCP-discovered bindings: work-item lookup, search,
+creation, state transition, children, artifact publication/listing, and
 development links.
 
 The bootstrap result must answer these questions for later hooks and skills:
@@ -162,6 +166,11 @@ EPIC-0001 Verified delivery
 
 On restart, rerun bootstrap verification, read the configured work item and its artifacts, inspect the linked pull request, and continue from the first incomplete checkpoint. The orchestrator does not reconstruct local session files. If the gateway, credentials, or mappings are unavailable, hooks fail closed; repair the integration configuration and rerun verification before writing.
 
-## Responsibility boundaries
+## Responsibility Boundaries
 
-The orchestrator discovers skills, invokes them, validates contracts, retries transient failures, and reflects on drafts. The `workflow-integrations` gateway performs provider calls. Tracker adapters own tracker payloads and mappings; SCM adapters own repository and pull-request payloads. Core skills only use the abstract contract.
+The orchestrator discovers skills, invokes them, validates contracts, retries
+transient failures, and reflects on drafts. The `workflow-integrations` gateway
+performs provider calls through configured tracker and SCM adapters. Remote
+tracker adapters call remote MCP servers; the local tracker adapter calls the
+project-local MCP server, which owns `.local-tracker/` storage. Core skills only
+use the abstract contract.

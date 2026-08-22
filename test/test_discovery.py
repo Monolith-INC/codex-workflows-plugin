@@ -33,11 +33,26 @@ class DiscoveryTests(unittest.TestCase):
             missing = validate_tracker_mappings(mapping_presets(adapter))
             self.assertEqual(missing, ())
 
-    def test_local_tracker_discovery_requires_no_transport_and_keeps_mappings(self):
+    def test_local_tracker_discovery_resolves_provider_mcp_bindings(self):
         result = discover_provider_capabilities(
-            kind="tracker", adapter="local_tracker", connection={}
+            kind="tracker",
+            adapter="local_tracker",
+            connection={"command": "true", "args": []},
+            discovered_tools=[
+                "get_work_item",
+                "search_work_items",
+                "create_work_item",
+                "list_children",
+                "transition_work_item",
+                "publish_artifact",
+                "list_artifacts",
+                "link_development_artifact",
+            ],
         )
-        self.assertEqual(result.resolved_bindings, {})
+        self.assertEqual(result.resolved_bindings["get_work_item"], "get_work_item")
+        self.assertEqual(
+            result.resolved_bindings["publish_artifact"], "publish_artifact"
+        )
         self.assertEqual(result.missing_capabilities, ())
         self.assertEqual(result.kind, "tracker")
         self.assertEqual(validate_tracker_mappings(result.suggested_mappings), ())
@@ -114,6 +129,19 @@ class DiscoveryTests(unittest.TestCase):
         )
         self.assertTrue(any("binding" in item for item in problems))
         self.assertTrue(any("mapping" in item for item in problems))
+
+    def test_verify_integration_capabilities_requires_local_tracker_bindings(self):
+        problems = verify_integration_capabilities(
+            {
+                "tracker": {
+                    "adapter": "local_tracker",
+                    "bindings": {},
+                    "mappings": mapping_presets("local_tracker"),
+                },
+                "scm": {"adapter": "github"},
+            }
+        )
+        self.assertTrue(any("tracker missing binding" in item for item in problems))
 
 
 if __name__ == "__main__":
