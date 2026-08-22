@@ -1,7 +1,8 @@
 ---
+name: reconcile-feature-stack
 description: Reconcile stacked story branches/PRs onto the feature branch in order
 ---
 
 # Reconcile Feature Stack
 
-Use the matching skill. Resolve the feature and children through the configured tracker adapter; use the SCM adapter for branches and pull requests. Durable state stays on the tracker — do not create local workflow ledgers.
+Follow `skills/reconcile-feature-stack/SKILL.md`. Inspect feature and story pull requests through the SCM adapter, merge or rebase ancestors into descendants in order, and publish reconciliation evidence to the tracker.

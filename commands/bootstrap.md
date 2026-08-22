@@ -1,4 +1,5 @@
 ---
+name: bootstrap
 description: Install or reconfigure tracker/SCM integrations for this project
 ---
 
