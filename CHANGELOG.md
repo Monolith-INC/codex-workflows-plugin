@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.5.22
+
+### Documentation and install
+- README rewrite with curl install one-liner and Monolith-INC repo slug.
+- Release workflow uploads zip and `install.sh` on `v*` tags.
+
+### Quality and CI
+- mypy fix in orchestrator handlers.
+- Tracked workflow templates in `skills/codex_workflows/resources/templates` for CI.
+
+
 ## 0.5.21
 
 ### Provider-neutral workflow
