@@ -170,6 +170,7 @@ def configure_integrations(
     config_source: Path | None = None,
     discover: bool = True,
     confirm_mappings: dict | None = None,
+    runtime_dir: Path | None = None,
 ) -> Path:
     """Write provider-neutral setup while keeping provider details adapter-owned."""
     from scripts.integrations.discovery import (
@@ -201,7 +202,9 @@ def configure_integrations(
     else:
         if "{key}" not in branch_template:
             raise ValueError("branch template must contain {key}")
-        tracker_config = _default_tracker_config(tracker, tracker_scope, project_dest)
+        tracker_config = _default_tracker_config(
+            tracker, tracker_scope, project_dest, runtime_dir
+        )
         tracker_config["branchPattern"] = branch_template
         payload = {
             "schemaVersion": 1,
@@ -209,6 +212,10 @@ def configure_integrations(
             "tracker": tracker_config,
             "scm": _default_scm_config(scm, project_dest),
         }
+
+    payload = _with_local_tracker_transport(
+        payload, project_dest=project_dest, runtime_dir=runtime_dir
+    )
 
     tracker_cfg = payload["tracker"]
     scm_cfg = payload["scm"]
@@ -273,7 +280,10 @@ def configure_integrations(
 
 
 def _default_tracker_config(
-    provider: str, scope: str, project_dest: Path | None = None
+    provider: str,
+    scope: str,
+    project_dest: Path | None = None,
+    runtime_dir: Path | None = None,
 ) -> dict:
     from scripts.integrations.discovery import mapping_presets
 
@@ -331,10 +341,55 @@ def _default_tracker_config(
             "adapter": "local_tracker",
             "root": ".local-tracker",
             "storagePolicy": "committed",
+            "connection": _local_tracker_connection(
+                project_dest or Path.cwd(), runtime_dir, ".local-tracker"
+            ),
             "mappings": presets,
-            "bindings": {},
+            "bindings": _local_tracker_bindings(),
         }
     raise ValueError(f"unsupported tracker: {provider}")
+
+
+def _with_local_tracker_transport(
+    payload: dict, *, project_dest: Path, runtime_dir: Path | None = None
+) -> dict:
+    tracker = payload.get("tracker")
+    if not isinstance(tracker, dict) or tracker.get("adapter") != "local_tracker":
+        return payload
+    tracker = dict(tracker)
+    root = str(tracker.get("root") or ".local-tracker")
+    tracker.setdefault(
+        "connection", _local_tracker_connection(project_dest, runtime_dir, root)
+    )
+    tracker["bindings"] = {
+        **_local_tracker_bindings(),
+        **(tracker.get("bindings") or {}),
+    }
+    result = dict(payload)
+    result["tracker"] = tracker
+    return result
+
+
+def _local_tracker_connection(
+    project_dest: Path, runtime_dir: Path | None, root: str
+) -> dict:
+    runtime = (runtime_dir or default_install_dir(project_dest)).resolve()
+    return {
+        "command": "python3",
+        "args": [
+            str(runtime / "scripts" / "integrations" / "run_local_tracker.py"),
+            "--project-root",
+            str(project_dest.resolve()),
+            "--root",
+            root,
+        ],
+    }
+
+
+def _local_tracker_bindings() -> dict[str, str]:
+    from scripts.integrations.local_tracker import LOCAL_TRACKER_BINDINGS
+
+    return dict(LOCAL_TRACKER_BINDINGS)
 
 
 def _initialize_local_tracker(project_dest: Path, tracker: dict) -> None:
@@ -1024,6 +1079,7 @@ def main() -> int:
                     tracker_scope=args.tracker_scope,
                     config_source=args.integration_config,
                     discover=not args.skip_discovery,
+                    runtime_dir=install_dir,
                 )
             elif not args.tracker or not args.scm:
                 print(
@@ -1039,6 +1095,7 @@ def main() -> int:
                     branch_template=args.branch_template,
                     tracker_scope=args.tracker_scope,
                     discover=not args.skip_discovery,
+                    runtime_dir=install_dir,
                 )
             if args.tracker == "local_tracker":
                 payload = json.loads(config_path.read_text(encoding="utf-8"))

@@ -55,9 +55,7 @@ class StdioMcpClient:
             raise IntegrationError("provider_error", str(error))
         result = response.get("result") or {}
         if result.get("isError"):
-            raise IntegrationError(
-                "provider_error", _content_text(result.get("content"))
-            )
+            raise _integration_error_from_content(result.get("content"))
         return _decode_content(result.get("content"), result)
 
     def _roundtrip(
@@ -101,6 +99,12 @@ class StdioMcpClient:
         finally:
             with suppress(OSError):
                 process.kill()
+            with suppress(OSError, subprocess.TimeoutExpired):
+                process.wait(timeout=1)
+            for stream in (process.stdin, process.stdout, process.stderr):
+                if stream is not None:
+                    with suppress(OSError):
+                        stream.close()
 
     def _send(self, process: subprocess.Popen[str], payload: dict[str, Any]) -> None:
         if process.stdin is None:
@@ -163,6 +167,21 @@ def _decode_content(content: Any, fallback: Any) -> Any:
         except json.JSONDecodeError:
             return text
     return fallback
+
+
+def _integration_error_from_content(content: Any) -> IntegrationError:
+    text = _content_text(content)
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        return IntegrationError("provider_error", text)
+    if isinstance(payload, dict) and payload.get("code"):
+        return IntegrationError(
+            str(payload["code"]),
+            str(payload.get("message") or payload["code"]),
+            retryable=bool(payload.get("retryable")),
+        )
+    return IntegrationError("provider_error", text)
 
 
 def _content_text(content: Any) -> str:

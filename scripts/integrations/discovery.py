@@ -197,16 +197,6 @@ def discover_provider_capabilities(
             provider="github",
             kind="github",
         )
-    if adapter == "local_tracker":
-        return DiscoveryResult(
-            discovered_tools=("local_tracker",),
-            resolved_bindings={},
-            suggested_mappings=mapping_presets(adapter),
-            missing_capabilities=(),
-            provider=adapter,
-            kind=kind,
-        )
-
     tools = discovered_tools
     if tools is None:
         mcp = client or client_from_connection(connection)
@@ -244,7 +234,7 @@ def validate_tracker_mappings(mappings: Mapping[str, Any]) -> tuple[str, ...]:
 
 def validate_bindings(bindings: Mapping[str, Any], *, kind: str) -> tuple[str, ...]:
     required = REQUIRED_TRACKER_OPS if kind == "tracker" else REQUIRED_SCM_OPS
-    if kind in {"github", "local_tracker"}:
+    if kind == "github":
         return ()
     return tuple(op for op in required if not str(bindings.get(op) or "").strip())
 

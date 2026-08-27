@@ -1,3 +1,4 @@
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -15,7 +16,10 @@ from scripts.integrations.contracts import (
     LogicalState,
     WorkItemKind,
 )
-from scripts.integrations.local_tracker import LocalTrackerAdapter
+from scripts.integrations.local_tracker import (
+    LOCAL_TRACKER_BINDINGS,
+    LocalTrackerAdapter,
+)
 from scripts.integrations.publish import publish_artifact_idempotent
 
 
@@ -78,8 +82,39 @@ class AdapterContractTests(unittest.TestCase):
             adapter = LocalTrackerAdapter(
                 {
                     "adapter": "local_tracker",
-                    "projectRoot": str(root),
+                    "connection": {
+                        "command": sys.executable,
+                        "args": [
+                            str(
+                                Path(__file__).parents[2]
+                                / "scripts"
+                                / "integrations"
+                                / "run_local_tracker.py"
+                            ),
+                            "--project-root",
+                            str(root),
+                            "--root",
+                            ".local-tracker",
+                        ],
+                    },
+                    "bindings": dict(LOCAL_TRACKER_BINDINGS),
                     "root": ".local-tracker",
+                    "mappings": {
+                        "kinds": {
+                            "epic": "epic",
+                            "feature": "feature",
+                            "user_story": "user_story",
+                            "task": "task",
+                            "bug": "bug",
+                        },
+                        "states": {
+                            "backlog": "backlog",
+                            "ready": "ready",
+                            "in_progress": "in_progress",
+                            "done": "done",
+                            "canceled": "canceled",
+                        },
+                    },
                 }
             )
             epic = adapter.create_work_item("epic", "Quality gates", "Outcome")

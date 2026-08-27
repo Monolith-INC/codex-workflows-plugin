@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.5.26
+
+### Stacked feature landing
+
+- Added `/merge-story-stack-into-feature` skill, command, workflow, and binding rules to merge stacked Story branches into the Feature branch oldest→newest with merge commits only (never squash/rebase).
+- Hooks deny `git rebase` and force-push while `.codex-workflows/active-stage` (or `CODEX_WORKFLOW_STAGE`) is set to `merge-story-stack-into-feature`.
+- Documented the lifecycle gap fill between `reconcile-feature-stack` and `finish-feature-development`.
+
+## 0.5.25
+
+### Local tracker MCP
+
+- Added a repository-local tracker MCP provider so local tracker installs use the same bound provider contract as remote tracker integrations.
+
 ## 0.5.24
 
 ### Quality gates
