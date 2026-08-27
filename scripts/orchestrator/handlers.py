@@ -101,22 +101,68 @@ def handle_write_spec(invocation: Invocation) -> HandlerResult:
 
 def handle_start_ticket(invocation: Invocation) -> HandlerResult:
     arguments, instructions = invocation.arguments, invocation.instructions
-    ticket_id = str(arguments["ticket_id"])
+    ticket_id = str(arguments.get("ticket_id", "")).strip()
+    draft_location = str(arguments.get("draft_location", "")).strip()
+    title = str(arguments.get("title", "")).strip()
+    draft_required = not ticket_id and not (
+        draft_location or title or _source(arguments).strip()
+    )
+    next_actions = [
+        "Call workflow_tracking_status and stop if tracking is paused.",
+    ]
+    if not ticket_id:
+        next_actions.extend(
+            [
+                "Ask for a draft location; if none exists, interview the user "
+                "for title, kind, requirements, acceptance criteria, "
+                "constraints, and parent work item.",
+                "Create the tracker item with tracker_create_work_item from "
+                "the accepted draft.",
+                "Create and check out a work-item branch from the "
+                "bootstrap-selected template, substituting the created ticket "
+                "key and a concise slug.",
+                "Transition the created work item to logical in_progress.",
+                "Generate and publish the required specification artifacts "
+                "before implementation writes.",
+            ]
+        )
+    else:
+        next_actions.extend(
+            [
+                "Fetch the existing tracker item and artifacts.",
+                "Create or switch to a work-item branch from the "
+                "bootstrap-selected template when the current branch does not "
+                "map to this ticket.",
+                "Transition the work item to logical in_progress.",
+                "Generate and publish any missing specification artifacts "
+                "before implementation writes.",
+            ]
+        )
     plan = plan_spec_generation(
-        ticket_id,
+        ticket_id or title or "new-ticket",
         source_text=_source(arguments),
         existing_artifacts=arguments.get("existing_artifacts", []),
     )
-    directive = on_start_ticket(plan)
+    directive = None if not ticket_id else on_start_ticket(plan)
+    if not ticket_id:
+        mode = "bootstrap"
+    elif directive:
+        mode = "instructions"
+    else:
+        mode = "completed"
     return HandlerResult(
         product={
             "ticket_id": ticket_id,
             "artifact_scope": "tracker",
             "transition_required": "in_progress",
+            "ticket_bootstrap_required": not bool(ticket_id),
+            "draft_required": draft_required,
+            "draft_location": draft_location,
             "spec_plan": plan.to_dict(),
             "write_spec_directive": directive,
             "generation_required": plan.generation_required,
-            "mode": "instructions" if directive else "completed",
+            "next_actions": next_actions,
+            "mode": mode,
             "instructions": instructions,
         }
     )
@@ -251,6 +297,18 @@ def handle_reconcile_feature_stack(invocation: Invocation) -> HandlerResult:
     )
 
 
+def handle_merge_story_stack_into_feature(invocation: Invocation) -> HandlerResult:
+    plan = _feature_plan(invocation.arguments, mode="merge-story-stack")
+    return HandlerResult(
+        product={
+            "mode": "instructions",
+            "skill": "merge-story-stack-into-feature",
+            "plan": plan,
+            "instructions": invocation.instructions,
+        }
+    )
+
+
 def handle_instruction_only(invocation: Invocation) -> HandlerResult:
     return HandlerResult(
         product={
@@ -270,6 +328,7 @@ _HANDLERS: dict[str, Callable[[Invocation], HandlerResult]] = {
     "feature-implementation": handle_feature_implementation,
     "finish-feature-development": handle_finish_feature_development,
     "reconcile-feature-stack": handle_reconcile_feature_stack,
+    "merge-story-stack-into-feature": handle_merge_story_stack_into_feature,
 }
 
 

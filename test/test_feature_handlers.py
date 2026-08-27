@@ -4,6 +4,7 @@ from scripts.orchestrator.handlers import (
     get_handler,
     handle_feature_implementation,
     handle_finish_feature_development,
+    handle_merge_story_stack_into_feature,
     handle_reconcile_feature_stack,
 )
 from scripts.orchestrator.invocation import Invocation
@@ -41,6 +42,7 @@ class FeatureHandlerTests(unittest.TestCase):
             (handle_feature_implementation, "feature-implementation"),
             (handle_finish_feature_development, "finish-feature-development"),
             (handle_reconcile_feature_stack, "reconcile-feature-stack"),
+            (handle_merge_story_stack_into_feature, "merge-story-stack-into-feature"),
         ):
             result = handler(_invocation(skill, args))
             self.assertEqual(result.product["mode"], "instructions")

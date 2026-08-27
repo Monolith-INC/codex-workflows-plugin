@@ -38,7 +38,7 @@ curl -fsSL https://github.com/Monolith-INC/codex-workflows-plugin/releases/lates
 
 Optional flags: `--target claude|cursor|codex|all-agents`, `--uninstall`.
 
-Pin a release with `CODEX_WORKFLOWS_VERSION=v0.5.25`. Offline installs can set `CODEX_WORKFLOWS_RELEASE_ZIP=/path/to/codex-workflows-plugin-*.zip`.
+Pin a release with `CODEX_WORKFLOWS_VERSION=v0.5.26`. Offline installs can set `CODEX_WORKFLOWS_RELEASE_ZIP=/path/to/codex-workflows-plugin-*.zip`.
 
 ### Requirements
 
@@ -88,12 +88,13 @@ DevOps Boards, or the local tracker.
 | Command | Use it when | Example outcome |
 | --- | --- | --- |
 | `/bootstrap` | Installing or rewiring the plugin in a project. | Creates `.codex-workflows/integrations.json`, installs host hooks, and verifies tracker/SCM bindings. |
-| `/start-ticket` | Beginning work on a mapped branch. | Fetches `ENG-42`, confirms the branch contains the work-item key, moves it to `in_progress`, and returns the spec plan. |
+| `/start-ticket` | Beginning tracked work from a draft or existing item. | Creates or fetches `ENG-42`, creates/checks out the mapped branch, moves it to `in_progress`, and returns the spec plan. |
 | `/write-spec` | Turning intent into durable implementation artifacts. | Publishes an implementation plan, RFC, ADR, or task spec as a versioned tracker artifact. |
 | `/resolve-ticket` | Finishing a work item. | Publishes resolution and verification evidence, links the PR, and requests the logical `done` transition. |
 | `/review-pr` | Processing review threads. | Reads SCM review comments, classifies them, applies accepted changes, and publishes a review artifact. |
 | `/feature-implementation` | Starting a parent feature with child stories. | Builds a feature plan and stacked story branch order from Epic/Feature/User Story relationships. |
 | `/reconcile-feature-stack` | A parent branch changed while child stories are open. | Replays ancestor changes through descendant story branches in order. |
+| `/merge-story-stack-into-feature` | Stacked stories are ready to land into the feature. | Merges Story→Feature oldest→newest with merge commits only (never squash). |
 | `/finish-feature-development` | All feature stories are complete. | Creates the feature-to-trunk closeout path and publishes final feature evidence. |
 | `/skip-tracker` | You need untracked work without tracker enforcement. | Sets `tracking.mode` to `skipped`; tracker commands pause, SCM and Git safety stay on. |
 | `/resume-tracker` | You are ready to enforce the saved tracker again. | Restores `tracking.mode: enforced` without rediscovering provider bindings. |
@@ -102,16 +103,14 @@ DevOps Boards, or the local tracker.
 Example single-ticket conversation:
 
 ```text
-User: /start-ticket ENG-42
-Agent: confirms branch story/ENG-42-add-login, moves ENG-42 to in_progress,
-       and proposes the required implementation/spec artifacts.
-
-User: /write-spec
-Agent: drafts the implementation plan, runs review, and publishes the accepted
-       artifact to the configured tracker.
+User: /start-ticket
+Agent: asks for a draft location, or interviews for title, requirements, and
+       acceptance criteria; creates ENG-42; creates story/ENG-42-add-login;
+       moves ENG-42 to in_progress; and proposes the required specs.
 
 User: implement it
-Agent: writes code only after the branch, state, and spec checks pass.
+Agent: drafts and publishes required specs first, then writes code only after
+       the branch, state, and spec checks pass.
 
 User: /resolve-ticket
 Agent: publishes verification evidence, links the PR, and requests done.
@@ -310,16 +309,16 @@ runner before publishing.
 
 ### Single work item
 
-1. Create or select a work item such as `ENG-42`.
-2. Create a branch from the configured template, for example
-   `story/ENG-42-add-login`.
-3. Run `/start-ticket`. The tracker item is fetched, mapped to the branch, and
-   moved to `in_progress`.
-4. Run `/write-spec` to publish the accepted implementation plan or design
-   artifact before code changes.
-5. Implement and verify. Hooks keep the branch tied to that one work item.
-6. Open a PR through the configured SCM adapter.
-7. Run `/resolve-ticket` with test results and release notes. The skill
+1. Run `/start-ticket` with a ticket, draft location, or short intent. If no
+   draft exists, the agent asks for the title, requirements, acceptance
+   criteria, constraints, and optional parent work item.
+2. The skill creates or fetches the tracker item, creates/checks out the branch
+   from the configured template, and moves the item to `in_progress`.
+3. The skill publishes the accepted implementation plan or design artifact
+   before code changes.
+4. Implement and verify. Hooks keep the branch tied to that one work item.
+5. Open a PR through the configured SCM adapter.
+6. Run `/resolve-ticket` with test results and release notes. The skill
    publishes resolution evidence, links the PR, and requests the logical `done`
    transition.
 
@@ -338,8 +337,10 @@ EPIC-0001 Platform quality
 Run `/feature-implementation` from the parent feature to plan the stack.
 Implement each story on its own branch, target story PRs at the feature branch,
 and use `/reconcile-feature-stack` whenever an ancestor branch changes. When
-all child stories are merged, `/finish-feature-development` handles the
-feature-to-trunk closeout and publishes the final evidence.
+stories are ready to land, `/merge-story-stack-into-feature` merges them into
+the feature in stack order with merge commits only. After all child stories are
+in the feature, `/finish-feature-development` handles the feature-to-trunk
+closeout and publishes the final evidence.
 
 ### Paused tracking
 
